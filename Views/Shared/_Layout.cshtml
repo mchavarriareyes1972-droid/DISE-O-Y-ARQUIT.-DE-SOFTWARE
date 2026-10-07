@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>@ViewData["Title"] - Bodega Giovanna</title>
+  <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-icon">G</span><div><strong>Bodega Giovanna</strong><small>Sistema de gestión</small></div></div>
+      <p class="menu-label">MENÚ PRINCIPAL</p>
+      <nav aria-label="Menú principal">
+        <a href="@Url.Action("Index", "Home")">Inicio</a>
+        <a href="@Url.Action("Ventas", "Home")">Ventas</a>
+        <a href="@Url.Action("Inventario", "Home")">Inventario</a>
+        <a href="@Url.Action("Compras", "Home")">Compras</a>
+        <a href="@Url.Action("Clientes", "Home")">Clientes y fiados</a>
+        <a href="@Url.Action("Reportes", "Home")">Reportes</a>
+      </nav>
+      <div class="sidebar-foot">Proyecto académico · Frontend</div>
+    </aside>
+    <div class="main-area">
+      <header class="topbar"><span>Bodega Giovanna / @ViewData["Title"]</span><span class="badge">Vista de demostración</span></header>
+      <main class="content">@RenderBody()</main>
+      <footer>HTML5 · CSS3 · JavaScript · ASP.NET Core MVC</footer>
+    </div>
+  </div>
+  <script src="~/js/site.js" asp-append-version="true"></script>
+  @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

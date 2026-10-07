@@ -1,0 +1,10 @@
+@{ ViewData["Title"] = "Inicio"; }
+<div class="page-heading"><div><p class="eyebrow">PANEL GENERAL</p><h1>Bienvenidos a Bodega Giovanna</h1><p>Accede a las funciones principales del sistema desde el menú.</p></div></div>
+<div class="cards">
+  <a class="card link-card" href="@Url.Action("Ventas", "Home")"><h2>Ventas</h2><p>Seleccionar productos y calcular total y vuelto.</p><span class="more">Abrir módulo →</span></a>
+  <a class="card link-card" href="@Url.Action("Inventario", "Home")"><h2>Inventario</h2><p>Revisar precios, existencias y stock bajo.</p><span class="more">Abrir módulo →</span></a>
+  <a class="card link-card" href="@Url.Action("Compras", "Home")"><h2>Compras</h2><p>Registrar la recepción de productos de ejemplo.</p><span class="more">Abrir módulo →</span></a>
+  <a class="card link-card" href="@Url.Action("Clientes", "Home")"><h2>Clientes y fiados</h2><p>Consultar saldos y registrar abonos.</p><span class="more">Abrir módulo →</span></a>
+  <a class="card link-card" href="@Url.Action("Reportes", "Home")"><h2>Reportes</h2><p>Ver el resumen de las ventas de esta sesión.</p><span class="more">Abrir módulo →</span></a>
+</div>
+<div class="notice">Los datos son de prueba y se guardan solo durante esta sesión del navegador.</div>

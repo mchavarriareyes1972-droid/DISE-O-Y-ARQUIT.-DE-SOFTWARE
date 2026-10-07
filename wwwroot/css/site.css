@@ -1,0 +1,407 @@
+/* Base */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    color: #243142;
+    background: #f5f7fa;
+    font: 15px/1.5 Arial, Helvetica, sans-serif;
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+/* Estructura principal */
+.app {
+    display: flex;
+    min-height: 100vh;
+}
+
+.sidebar {
+    display: flex;
+    flex-shrink: 0;
+    flex-direction: column;
+    width: 240px;
+    padding: 24px 16px;
+    color: #fff;
+    background: #183c38;
+}
+
+.main-area {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.content {
+    flex: 1;
+    width: 100%;
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 28px 30px;
+}
+
+/* Marca y navegación */
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 2px 8px 28px;
+}
+
+.brand-icon {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    border-radius: 9px;
+    color: #173a36;
+    background: #d8ad69;
+    font-size: 22px;
+    font-weight: bold;
+}
+
+.brand strong,
+.brand small {
+    display: block;
+}
+
+.brand strong {
+    font-size: 16px;
+}
+
+.brand small {
+    color: #bed4cb;
+}
+
+.menu-label {
+    padding: 0 12px;
+    color: #a4c1b4;
+    font-size: 11px;
+    letter-spacing: 1px;
+}
+
+.sidebar nav {
+    display: grid;
+    gap: 5px;
+}
+
+.sidebar nav a {
+    padding: 10px 12px;
+    border-radius: 7px;
+    color: #e0ece7;
+}
+
+.sidebar nav a:hover,
+.sidebar nav a.active {
+    color: #fff;
+    background: #315d54;
+}
+
+.sidebar-foot {
+    margin-top: auto;
+    padding: 14px 10px 0;
+    color: #a4c1b4;
+    font-size: 12px;
+}
+
+/* Barra superior y pie */
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 30px;
+    border-bottom: 1px solid #e4e9ed;
+    color: #5d6b77;
+    background: #fff;
+}
+
+footer {
+    padding: 15px 30px;
+    color: #75838e;
+    font-size: 12px;
+}
+
+.badge {
+    padding: 5px 10px;
+    border-radius: 20px;
+    color: #28734c;
+    background: #edf5ee;
+    font-size: 12px;
+}
+
+/* Encabezados y paneles */
+.page-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 22px;
+}
+
+.eyebrow {
+    margin: 0 0 5px;
+    color: #2d8061;
+    font-size: 11px;
+    font-weight: bold;
+    letter-spacing: 1.3px;
+}
+
+h1 {
+    margin: 0;
+    font-size: 28px;
+}
+
+h2 {
+    margin: 0 0 14px;
+    font-size: 17px;
+}
+
+.page-heading p:not(.eyebrow) {
+    margin: 5px 0 0;
+    color: #697784;
+}
+
+.cards,
+.stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+    gap: 16px;
+}
+
+.card {
+    padding: 21px;
+    border: 1px solid #e3e8ec;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 2px 9px #1e354009;
+}
+
+.link-card:hover {
+    transform: translateY(-2px);
+    border-color: #8ab9a7;
+}
+
+.link-card h2 {
+    margin: 10px 0 4px;
+}
+
+.link-card p,
+.muted {
+    color: #697784;
+}
+
+.icon {
+    font-size: 27px;
+}
+
+.more {
+    color: #267053;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.notice {
+    margin-top: 20px;
+    padding: 14px 17px;
+    border-left: 4px solid #4b9470;
+    border-radius: 6px;
+    color: #3a6550;
+    background: #eaf3ee;
+}
+
+.two-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.9fr);
+    gap: 18px;
+}
+
+.section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+}
+
+.section-head span {
+    color: #7c8791;
+    font-size: 12px;
+}
+
+/* Formularios y botones */
+label {
+    display: block;
+    margin: 15px 0 6px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+input,
+select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #cad3d9;
+    border-radius: 6px;
+    background: #fff;
+    font: inherit;
+}
+
+button {
+    padding: 8px 12px;
+    border: 1px solid #b8cfc3;
+    border-radius: 6px;
+    color: #27624d;
+    background: #eff7f1;
+    font: inherit;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #dceee3;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.primary {
+    margin-top: 16px;
+    border-color: #267052;
+    color: #fff;
+    background: #267052;
+}
+
+.primary:hover {
+    background: #195940;
+}
+
+.full {
+    width: 100%;
+}
+
+/* Ventas, tablas e indicadores */
+.product-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 13px 0;
+    border-bottom: 1px solid #edf0f2;
+}
+
+.product-row small {
+    display: block;
+    margin-top: 2px;
+    color: #77848d;
+}
+
+.total-row {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 13px;
+    padding-top: 15px;
+    border-top: 1px solid #e3e8ec;
+    font-size: 18px;
+}
+
+.message {
+    min-height: 22px;
+    color: #356b50;
+    font-weight: bold;
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    margin-top: 12px;
+    border-collapse: collapse;
+}
+
+th,
+td {
+    padding: 11px 9px;
+    border-bottom: 1px solid #e9edef;
+    text-align: left;
+}
+
+th {
+    color: #63727d;
+    background: #f7f9fa;
+    font-size: 12px;
+}
+
+.status {
+    padding: 4px 8px;
+    border-radius: 15px;
+    color: #2b704a;
+    background: #e7f3ea;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.status.low {
+    color: #8d6119;
+    background: #fff0d8;
+}
+
+.stats .card p {
+    margin: 0;
+    color: #697784;
+}
+
+.stats .card strong {
+    display: block;
+    margin-top: 8px;
+    color: #1e5744;
+    font-size: 28px;
+}
+
+/* Diseño adaptable */
+@media (max-width: 760px) {
+    .app {
+        display: block;
+    }
+
+    .sidebar {
+        width: 100%;
+        padding: 14px;
+    }
+
+    .brand {
+        padding-bottom: 12px;
+    }
+
+    .sidebar nav {
+        display: flex;
+        overflow-x: auto;
+    }
+
+    .sidebar nav a {
+        white-space: nowrap;
+    }
+
+    .menu-label,
+    .sidebar-foot {
+        display: none;
+    }
+
+    .content {
+        padding: 20px 15px;
+    }
+
+    .topbar {
+        padding: 13px 15px;
+    }
+
+    .two-columns {
+        grid-template-columns: 1fr;
+    }
+}
