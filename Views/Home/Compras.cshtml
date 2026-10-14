@@ -1,3 +1,13 @@
 @{ ViewData["Title"] = "Compras"; }
-<div class="page-heading"><div><p class="eyebrow">ABASTECIMIENTO</p><h1>Compras</h1><p>Simula una compra recibida y actualiza el inventario de ejemplo.</p></div></div>
-<div class="two-columns"><section class="card"><h2>Registrar compra</h2><label for="proveedor">Proveedor</label><input id="proveedor" type="text" maxlength="60" placeholder="Nombre del proveedor" /><label for="productoCompra">Producto</label><select id="productoCompra"></select><label for="cantidadCompra">Cantidad recibida</label><input id="cantidadCompra" type="number" min="1" step="1" value="1" /><button id="guardarCompra" type="button" class="primary">Registrar compra</button><p id="mensajeCompra" class="message" role="status"></p></section><section class="card"><h2>Última compra</h2><p id="ultimaCompra" class="muted">Aún no hay compras registradas en esta sesión.</p><div class="notice">La compra aumenta el stock que se muestra en Inventario.</div></section></div>
+<div class="page-heading"><div><p class="eyebrow">ABASTECIMIENTO</p><h1>Compras</h1><p>Busca productos y registra la mercadería recibida.</p></div></div>
+<section class="card">
+    <form id="formCompra"><div class="form-grid">
+        <div><label for="proveedor">Proveedor</label><input id="proveedor" maxlength="80" required /></div>
+        <div><label for="buscarCompra">Buscar producto por nombre o código</label><input id="buscarCompra" type="search" placeholder="Nombre o código" /></div>
+        <div><label for="productoCompra">Producto</label><select id="productoCompra" required></select></div>
+        <div><label for="cantidadCompra">Cantidad recibida</label><input id="cantidadCompra" type="number" min="1" step="1" value="1" required /></div>
+        <div><label for="costoCompra">Costo unitario (S/)</label><input id="costoCompra" type="number" min="0.01" step="0.01" required /></div>
+    </div><button type="submit" class="primary">Registrar compra</button></form>
+    <p id="mensajeCompra" class="message" role="status"></p>
+</section>
+<section class="card spaced"><h2>Historial de compras</h2><div class="table-wrap"><table><thead><tr><th>N.º</th><th>Fecha</th><th>Proveedor</th><th>Producto</th><th>Cantidad</th><th>Total</th></tr></thead><tbody id="tablaCompras"></tbody></table></div></section>

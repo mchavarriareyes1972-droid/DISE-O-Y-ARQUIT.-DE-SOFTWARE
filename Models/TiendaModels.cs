@@ -1,0 +1,112 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace Tienda_Giovanna.Models;
+
+public class Producto
+{
+    public int Id { get; set; }
+    public string Codigo { get; set; } = "";
+    public string Nombre { get; set; } = "";
+    public decimal Precio { get; set; }
+    public int Stock { get; set; }
+    public int StockMinimo { get; set; } = 5;
+    public List<int> AlternativosIds { get; set; } = new();
+    public bool StockBajo => Stock <= StockMinimo;
+}
+
+public class Cliente
+{
+    public int Id { get; set; }
+    public string Nombre { get; set; } = "";
+    public string Telefono { get; set; } = "";
+    public decimal Deuda { get; set; }
+}
+
+public class DetalleVenta
+{
+    public int ProductoId { get; set; }
+    public string Codigo { get; set; } = "";
+    public string Nombre { get; set; } = "";
+    public int Cantidad { get; set; }
+    public decimal PrecioUnitario { get; set; }
+    public decimal Subtotal { get; set; }
+}
+
+public class Venta
+{
+    public int Id { get; set; }
+    public DateTimeOffset Fecha { get; set; }
+    public List<DetalleVenta> Detalles { get; set; } = new();
+    public string FormaPago { get; set; } = "";
+    public int? ClienteId { get; set; }
+    public string? ClienteNombre { get; set; }
+    public string? ReferenciaPago { get; set; }
+    public decimal Total { get; set; }
+    public decimal MontoRecibido { get; set; }
+    public decimal Vuelto { get; set; }
+}
+
+public class Pago
+{
+    public int Id { get; set; }
+    public int ClienteId { get; set; }
+    public string ClienteNombre { get; set; } = "";
+    public DateTimeOffset Fecha { get; set; }
+    public decimal Monto { get; set; }
+    public string Metodo { get; set; } = "";
+    public decimal SaldoRestante { get; set; }
+}
+
+public class Compra
+{
+    public int Id { get; set; }
+    public DateTimeOffset Fecha { get; set; }
+    public string Proveedor { get; set; } = "";
+    public int ProductoId { get; set; }
+    public string ProductoNombre { get; set; } = "";
+    public int Cantidad { get; set; }
+    public decimal CostoUnitario { get; set; }
+    public decimal Total { get; set; }
+}
+
+public class LineaVentaSolicitud
+{
+    [Range(1, int.MaxValue)] public int ProductoId { get; set; }
+    [Range(1, int.MaxValue)] public int Cantidad { get; set; }
+}
+
+public class VentaSolicitud
+{
+    [Required, MinLength(1)] public List<LineaVentaSolicitud> Items { get; set; } = new();
+    [Required] public string FormaPago { get; set; } = "";
+    public int? ClienteId { get; set; }
+    public decimal MontoRecibido { get; set; }
+    [StringLength(100)] public string? ReferenciaPago { get; set; }
+}
+
+public class PagoSolicitud
+{
+    [Range(1, int.MaxValue)] public int ClienteId { get; set; }
+    public decimal Monto { get; set; }
+    [Required] public string Metodo { get; set; } = "";
+}
+
+public class CompraSolicitud
+{
+    [Required, StringLength(80)] public string Proveedor { get; set; } = "";
+    [Range(1, int.MaxValue)] public int ProductoId { get; set; }
+    [Range(1, int.MaxValue)] public int Cantidad { get; set; }
+    public decimal CostoUnitario { get; set; }
+}
+
+public class StockMinimoSolicitud
+{
+    [Range(1, int.MaxValue)] public int ProductoId { get; set; }
+    [Range(0, int.MaxValue)] public int StockMinimo { get; set; }
+}
+
+public class AlternativasSolicitud
+{
+    [Range(1, int.MaxValue)] public int ProductoId { get; set; }
+    [Required] public List<int> AlternativosIds { get; set; } = new();
+}

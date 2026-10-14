@@ -405,3 +405,18 @@ th {
         grid-template-columns: 1fr;
     }
 }
+
+
+/* Formularios y consultas de los RF */
+.spaced { margin-top: 20px; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin-bottom: 14px; }
+.button-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.low-text, .message.error { color: #a12a20; }
+select[multiple] { min-height: 150px; }
+small { display: block; }
+form small { margin-bottom: 12px; color: #536174; }
+dialog { max-width: 650px; width: calc(100% - 32px); max-height: 85vh; overflow: auto; border: 1px solid #cbd5df; border-radius: 8px; padding: 24px; color: #243142; }
+dialog::backdrop { background: rgba(0, 0, 0, .4); }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #24786b; outline-offset: 2px; }
+.product-row .button-row { justify-content: flex-end; }
+@media (max-width: 600px) { .product-row { flex-wrap: wrap; gap: 10px; } .product-row .button-row { justify-content: flex-start; } }

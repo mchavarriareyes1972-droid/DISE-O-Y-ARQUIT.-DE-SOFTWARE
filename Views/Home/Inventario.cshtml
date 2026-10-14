@@ -1,3 +1,24 @@
 @{ ViewData["Title"] = "Inventario"; }
-<div class="page-heading"><div><p class="eyebrow">PRODUCTOS</p><h1>Inventario</h1><p>Consulta los precios y las unidades disponibles.</p></div><span class="badge" id="cantidadProductos"></span></div>
-<section class="card"><label for="buscarInventario">Buscar producto</label><input id="buscarInventario" type="search" placeholder="Escribe el nombre" /><div class="table-wrap"><table><thead><tr><th>Producto</th><th>Precio</th><th>Stock</th><th>Estado</th></tr></thead><tbody id="tablaInventario"></tbody></table></div></section>
+<div class="page-heading"><div><p class="eyebrow">PRODUCTOS</p><h1>Inventario</h1><p>Consulta productos y configura la reposición y sus alternativas.</p></div></div>
+<section class="card">
+    <label for="buscarInventario">Buscar por nombre o código</label><input id="buscarInventario" type="search" placeholder="Nombre o código" />
+    <div class="table-wrap"><table><thead><tr><th>Código</th><th>Producto</th><th>Precio</th><th>Stock</th><th>Mínimo</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="tablaInventario"></tbody></table></div>
+    <p id="mensajeInventario" class="message" role="status"></p>
+</section>
+<div class="two-columns spaced">
+    <section class="card"><h2>Stock mínimo</h2>
+        <form id="formStockMinimo">
+            <label for="productoMinimo">Producto</label><select id="productoMinimo"></select>
+            <label for="stockMinimo">Cantidad mínima</label><input id="stockMinimo" type="number" min="0" step="1" required />
+            <button type="submit" class="primary">Guardar stock mínimo</button>
+        </form>
+    </section>
+    <section class="card"><h2>Productos alternativos</h2>
+        <form id="formAlternativas">
+            <label for="productoOriginal">Producto solicitado</label><select id="productoOriginal"></select>
+            <label for="productosAlternativos">Productos sustitutos</label><select id="productosAlternativos" multiple size="5"></select>
+            <small>Mantén Ctrl presionado para seleccionar varios. Solo se ofrecen alternativas con stock.</small>
+            <button type="submit" class="primary">Guardar alternativas</button>
+        </form>
+    </section>
+</div>

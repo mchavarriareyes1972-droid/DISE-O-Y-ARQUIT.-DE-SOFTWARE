@@ -1,0 +1,29 @@
+AVANCE DE LOS RF CON C# Y ASP.NET CORE MVC
+
+1. Descomprime este paquete en una carpeta nueva para probarlo.
+2. Abre Tienda_Giovanna.sln con Microsoft Visual Studio.
+3. Ejecuta con F5. Se necesita .NET 8.
+4. Prueba Ventas, Inventario, Compras, Clientes y Reportes.
+
+RECORRIDO DE PRUEBA
+- Ventas: busca P001, agrega dos unidades y recibe S/ 10.00. El total debe ser S/ 9.00 y el vuelto S/ 1.00.
+- Reportes: consulta las fechas correspondientes y abre Ver detalle para comprobar los productos y cantidades.
+- Ventas: registra una venta al fiado para María López. Comprueba el nuevo saldo en Clientes.
+- Clientes: registra un pago parcial o total. Consulta el historial de abonos.
+- Compras: busca P006 y registra una compra para reponer sus unidades. Comprueba Inventario.
+- Inventario: configura el stock mínimo de un producto y sus alternativas.
+- Ventas: Agua 625 ml empieza sin stock. Ver alternativas permite agregar Agua 1 litro.
+
+Los cambios usan modelos, controladores y un servicio en C#. JavaScript muestra los resultados y envía las solicitudes. Los datos están en la memoria de la aplicación y se reinician cuando se detiene el servidor. No existe base de datos todavía.
+
+COMPROBACIONES AUTOMÁTICAS
+En una terminal dentro de esta carpeta ejecuta:
+dotnet build Tienda_Giovanna.csproj
+dotnet run --project tests/RfChecks/RfChecks.csproj
+
+El paquete incluye también comprobaciones HTTP y un flujo de GitHub Actions. La compilación y los tests C# requieren ejecutarse en un equipo con .NET 8 o en GitHub Actions.
+
+SUBIR A TU REPOSITORIO
+Tras probarlo, conserva una copia de tus cambios locales antes de reemplazar archivos. Copia los archivos de este paquete dentro de la carpeta clonada del repositorio; no copies la carpeta exterior como otro proyecto anidado. Conserva los documentos que ya tengas allí. Abre la solución desde la carpeta clonada, confirma los cambios e insértalos en GitHub. El flujo de Actions comprobará el proyecto al subirlo.
+
+Este avance aún no incluye base de datos, inicio de sesión y roles, gestión completa de productos/proveedores ni exportación de reportes a PDF/CSV. Esas partes de la entrega final deben completarse después.

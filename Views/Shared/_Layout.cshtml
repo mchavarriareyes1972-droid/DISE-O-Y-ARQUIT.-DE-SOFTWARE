@@ -6,7 +6,7 @@
   <title>@ViewData["Title"] - Bodega Giovanna</title>
   <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
-<body>
+<body data-api-base="@Url.Content("~/api/tienda/")">
   <div class="app">
     <aside class="sidebar">
       <div class="brand"><span class="brand-icon">G</span><div><strong>Bodega Giovanna</strong><small>Sistema de gestión</small></div></div>
@@ -19,15 +19,18 @@
         <a href="@Url.Action("Clientes", "Home")">Clientes y fiados</a>
         <a href="@Url.Action("Reportes", "Home")">Reportes</a>
       </nav>
-      <div class="sidebar-foot">Proyecto académico · Frontend</div>
+      <div class="sidebar-foot">Proyecto académico · MVC</div>
     </aside>
     <div class="main-area">
-      <header class="topbar"><span>Bodega Giovanna / @ViewData["Title"]</span><span class="badge">Vista de demostración</span></header>
+      <header class="topbar"><span>Bodega Giovanna / @ViewData["Title"]</span><span class="badge">Datos de práctica</span></header>
       <main class="content">@RenderBody()</main>
-      <footer>HTML5 · CSS3 · JavaScript · ASP.NET Core MVC</footer>
+      <footer>Datos temporales mientras la aplicación esté abierta · Bodega Giovanna</footer>
     </div>
   </div>
+  <div hidden>@Html.AntiForgeryToken()</div>
+  <dialog id="dialogoDetalle"><h2 id="tituloDetalle"></h2><div id="contenidoDetalle"></div><button id="cerrarDetalle" type="button">Cerrar</button></dialog>
   <script src="~/js/site.js" asp-append-version="true"></script>
   @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
+

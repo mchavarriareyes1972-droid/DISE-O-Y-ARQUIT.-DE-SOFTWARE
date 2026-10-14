@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 
-namespace BodegaGiovanna.Controllers
+namespace Tienda_Giovanna.Controllers
 {
     public class HomeController : Controller
     {
@@ -10,5 +10,10 @@ namespace BodegaGiovanna.Controllers
         public IActionResult Compras() => View();
         public IActionResult Clientes() => View();
         public IActionResult Reportes() => View();
+        public IActionResult Error() => View(new Tienda_Giovanna.Models.ErrorViewModel
+        {
+            RequestId = System.Diagnostics.Activity.Current?.Id ?? HttpContext.TraceIdentifier
+        });
     }
 }
+

@@ -1,3 +1,15 @@
 @{ ViewData["Title"] = "Reportes"; }
-<div class="page-heading"><div><p class="eyebrow">RESUMEN</p><h1>Reportes</h1><p>Resultados de las operaciones realizadas en esta sesión.</p></div></div>
-<div class="stats"><section class="card"><p>Ventas realizadas</p><strong id="reporteCantidad">0</strong></section><section class="card"><p>Total vendido</p><strong id="reporteTotal">S/ 0.00</strong></section><section class="card"><p>Productos</p><strong id="reporteProductos">0</strong></section><section class="card"><p>Productos con stock bajo</p><strong id="reporteStockBajo">0</strong></section></div><div class="notice">Los importes son de demostración; no hay base de datos ni reportes oficiales.</div>
+<div class="page-heading"><div><p class="eyebrow">VENTAS Y REPORTES</p><h1>Historial de ventas</h1><p>Consulta un periodo y revisa el detalle de cada venta.</p></div></div>
+<section class="card">
+    <form id="formPeriodo"><div class="form-grid"><div><label for="fechaDesde">Desde</label><input id="fechaDesde" type="date" /></div><div><label for="fechaHasta">Hasta</label><input id="fechaHasta" type="date" /></div></div><div class="button-row"><button type="submit" class="primary">Consultar periodo</button><button type="button" id="limpiarPeriodo">Ver todas</button></div></form>
+    <p class="muted">Las fechas corresponden a la hora de Lima. Los abonos se muestran separados de las ventas al fiado.</p><p id="mensajeReportes" class="message" role="status"></p>
+</section>
+<div class="stats spaced">
+    <section class="card"><p>Ventas</p><strong id="reporteCantidad">0</strong></section>
+    <section class="card"><p>Total vendido</p><strong id="reporteTotal">S/ 0.00</strong></section>
+    <section class="card"><p>Cobrado en ventas</p><strong id="reporteCobrado">S/ 0.00</strong></section>
+    <section class="card"><p>Ventas al fiado</p><strong id="reporteFiado">S/ 0.00</strong></section>
+    <section class="card"><p>Abonos recibidos</p><strong id="reporteAbonos">S/ 0.00</strong></section>
+    <section class="card"><p>Productos con stock bajo actual</p><strong id="reporteStockBajo">0</strong></section>
+</div>
+<section class="card spaced"><div class="table-wrap"><table><thead><tr><th>N.º</th><th>Fecha</th><th>Cliente</th><th>Pago</th><th>Total</th><th>Acción</th></tr></thead><tbody id="tablaVentas"></tbody></table></div></section>
