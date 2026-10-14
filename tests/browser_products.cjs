@@ -76,7 +76,7 @@ const assert = require('node:assert/strict');
         await fila().getByRole('button', { name: 'Desactivar', exact: true }).waitFor();
 
         // El inventario debe seguir funcionando aunque todos los productos estén inactivos.
-        const token = await page.locator('[name=__RequestVerificationToken]').inputValue();
+        const token = await page.locator('[name=__RequestVerificationToken]').first().inputValue();
         const activos = await (await page.request.get(base + '/api/tienda/productos')).json();
         for (const p of activos) {
             const respuesta = await page.request.post(base + `/api/tienda/productos/${p.id}/estado`,

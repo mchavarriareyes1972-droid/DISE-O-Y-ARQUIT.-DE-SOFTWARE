@@ -36,6 +36,7 @@ jobs:
           node tests/browser_products.cjs
           node tests/browser_modules.cjs
       - name: Guardar reportes de prueba
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: reportes-qa
