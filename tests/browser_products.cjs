@@ -11,7 +11,7 @@ const assert = require('node:assert/strict');
     const fila = () => page.locator('#tablaInventario tr').filter({ hasText: 'Q901' });
     const abrirInventario = async () => {
         await page.goto(base + '/Home/Inventario');
-        await page.locator('#productoMinimo option').first().waitFor();
+        await page.locator('#productoMinimo option').first().waitFor({ state: 'attached' });
     };
     try {
         await abrirInventario();
@@ -63,7 +63,7 @@ const assert = require('node:assert/strict');
         await fila().getByRole('button', { name: 'Activar', exact: true }).waitFor();
         assert((await fila().innerText()).includes('Inactivo'));
         await page.goto(base + '/Home/Compras');
-        await page.locator('#productoCompra option').first().waitFor();
+        await page.locator('#productoCompra option').first().waitFor({ state: 'attached' });
         assert(!(await page.locator('#productoCompra').innerText()).includes('Q901'));
         await abrirInventario();
         await page.locator('#mostrarInactivos').check();
