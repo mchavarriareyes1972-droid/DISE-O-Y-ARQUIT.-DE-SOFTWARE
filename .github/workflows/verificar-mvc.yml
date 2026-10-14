@@ -17,7 +17,9 @@ jobs:
       - name: Comprobar los RF en C#
         run: dotnet run --project tests/RfChecks/RfChecks.csproj
       - name: Revisar sintaxis de JavaScript
-        run: node --check wwwroot/js/site.js
+        run: |
+          node --check wwwroot/js/site.js
+          node --check wwwroot/js/gestion.js
       - name: Preparar Chromium para probar productos
         run: |
           npm install --prefix /tmp/giovanna-ui --no-save playwright@1.62.1
@@ -32,3 +34,9 @@ jobs:
           trap 'kill "$servidor"' EXIT
           python3 tests/http_checks.py
           node tests/browser_products.cjs
+          node tests/browser_modules.cjs
+      - name: Guardar reportes de prueba
+        uses: actions/upload-artifact@v4
+        with:
+          name: reportes-qa
+          path: /tmp/giovanna-qa

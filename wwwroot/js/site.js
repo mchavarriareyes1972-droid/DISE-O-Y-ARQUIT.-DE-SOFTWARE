@@ -3,21 +3,26 @@ const $ = id => document.getElementById(id);
 const dinero = monto => new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(monto);
 const fecha = valor => new Intl.DateTimeFormat('es-PE', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Lima' }).format(new Date(valor));
 const baseApi = document.body.dataset.apiBase || '/api/tienda/';
+const esAdministrador = document.body.dataset.admin === 'true';
 let carrito = [];
 let catalogo = [];
 
-async function api(ruta, datos) {
+async function api(ruta, datos, raiz = baseApi) {
     const opciones = { credentials: 'same-origin', cache: 'no-store' };
     if (datos !== undefined) {
         opciones.method = 'POST';
         opciones.headers = { 'Content-Type': 'application/json', 'RequestVerificationToken': document.querySelector('[name="__RequestVerificationToken"]').value };
         opciones.body = JSON.stringify(datos);
     }
-    const respuesta = await fetch(baseApi + ruta, opciones);
+    const respuesta = await fetch(raiz + ruta, opciones);
+    if (respuesta.status === 401) {
+        location.assign(document.body.dataset.loginUrl || '/Cuenta/Login');
+        throw new Error('Tu sesión terminó. Inicia sesión nuevamente.');
+    }
     const contenido = await respuesta.json().catch(() => null);
     if (!respuesta.ok) {
         const errores = contenido?.errors ? Object.values(contenido.errors).flat().join(' ') : '';
-        throw new Error(contenido?.mensaje || errores || 'No se pudo completar la operación. Revisa los datos e intenta nuevamente.');
+        throw new Error(contenido?.mensaje || errores || (respuesta.status === 403 ? 'Tu rol no tiene permiso para realizar esta operación.' : 'No se pudo completar la operación. Revisa los datos e intenta nuevamente.'));
     }
     return contenido;
 }
@@ -70,7 +75,7 @@ function formulario(id, mensajeId, accion) {
         enviar.disabled = true;
         try { await accion(); }
         catch (error) { mensaje(mensajeId, error.message, true); }
-        finally { enviar.disabled = false; }
+        finally { enviar.disabled = enviar.dataset.bloqueado === 'true'; }
     });
 }
 function buscar(id, mensajeId, accion) {
@@ -188,7 +193,8 @@ async function iniciarVentas() {
 function renderInventario(productos) {
     tabla('tablaInventario', productos, 7, p => {
         const acciones = elemento('div', '', 'button-row');
-        acciones.append(boton('Ficha', () => fichaProducto(p.id)), boton('Editar', () => abrirProducto(p)),
+        acciones.append(boton('Ficha', () => fichaProducto(p.id)));
+        if (esAdministrador) acciones.append(boton('Editar', () => abrirProducto(p)),
             boton(p.activo ? 'Desactivar' : 'Activar', evento => cambiarEstadoProducto(p, evento.currentTarget)));
         return [p.codigo, p.nombre, dinero(p.precio), p.stock, p.stockMinimo,
             elemento('span', !p.activo ? 'Inactivo' : p.stockBajo ? 'Reponer' : 'Disponible',
@@ -247,6 +253,9 @@ async function cambiarEstadoProducto(producto, control) {
     finally { control.disabled = false; }
 }
 async function iniciarInventario() {
+    if (!esAdministrador) {
+        renderInventario(catalogo); buscar('buscarInventario', 'mensajeInventario', renderInventario); return;
+    }
     await recargarInventario();
     $('nuevoProducto').addEventListener('click', () => abrirProducto());
     $('cancelarProducto').addEventListener('click', () => $('dialogoProducto').close());
@@ -278,7 +287,7 @@ async function iniciarInventario() {
 
 async function renderCompras() {
     const compras = await api('compras');
-    tabla('tablaCompras', compras, 6, c => [c.id, fecha(c.fecha), c.proveedor, c.productoNombre, c.cantidad, dinero(c.total)]);
+    tabla('tablaCompras', compras, 6, c => [c.id, fecha(c.fecha), c.proveedorNombre, c.detalles.length, dinero(c.total), boton('Ver detalle', () => detalleCompra(c.id))]);
 }
 async function iniciarCompras() {
     const seleccionar = productos => {
@@ -286,10 +295,24 @@ async function iniciarCompras() {
         if (!productos.length) mensaje('mensajeCompra', 'No hay productos que coincidan.'); else mensaje('mensajeCompra', '');
     };
     seleccionar(catalogo); buscar('buscarCompra', 'mensajeCompra', seleccionar);
+    const proveedores = await api('proveedores');
+    opciones($('proveedorCompra'), proveedores, p => `${p.ruc} · ${p.razonSocial}`, p => p.id);
+    $('avisoProveedor').textContent = proveedores.length ? '' : 'Registra o activa un proveedor en el módulo Proveedores antes de comprar.';
+    renderLineasCompra();
     await renderCompras();
+    formulario('formLineaCompra', 'mensajeCompra', async () => {
+        const id = Number($('productoCompra').value);
+        const p = catalogo.find(p => p.id === id) || (await api('productos/' + id)).producto;
+        const cantidad = Number($('cantidadCompra').value), costoUnitario = Number($('costoCompra').value);
+        if (!Number.isInteger(cantidad) || cantidad <= 0 || costoUnitario <= 0) throw new Error('Ingresa cantidad y costo mayores que cero.');
+        const existente = lineasCompra.find(i => i.productoId === id);
+        if (existente) Object.assign(existente, { cantidad, costoUnitario });
+        else lineasCompra.push({ productoId: id, nombre: p.nombre, cantidad, costoUnitario });
+        renderLineasCompra(); mensaje('mensajeCompra', existente ? 'Cantidad y costo actualizados en el detalle.' : 'Producto agregado al detalle.');
+    });
     formulario('formCompra', 'mensajeCompra', async () => {
-        const compra = await api('compras', { proveedor: $('proveedor').value, productoId: Number($('productoCompra').value),
-            cantidad: Number($('cantidadCompra').value), costoUnitario: Number($('costoCompra').value) });
+        const compra = await api('compras', { proveedorId: Number($('proveedorCompra').value), items: lineasCompra.map(({ productoId, cantidad, costoUnitario }) => ({ productoId, cantidad, costoUnitario })) });
+        lineasCompra = []; renderLineasCompra();
         await renderCompras();
         mensaje('mensajeCompra', `Compra N.º ${compra.id} registrada. Total: ${dinero(compra.total)}. El stock fue actualizado.`);
     });
@@ -301,15 +324,19 @@ async function renderPagos() {
     tabla('tablaPagos', pagos, 6, p => [p.id, fecha(p.fecha), p.clienteNombre, p.metodo, dinero(p.monto), dinero(p.saldoRestante)]);
 }
 async function renderClientes() {
-    const clientes = await api('clientes');
-    opciones($('clientePago'), clientes, c => `${c.nombre} · Deuda: ${dinero(c.deuda)}`, c => c.id);
+    const clientes = await api('clientes?incluirInactivos=true');
+    clientesCatalogo = clientes;
+    const deudores = clientes.filter(c => c.deuda > 0);
+    opciones($('clientePago'), deudores, c => `${c.nombre} · Deuda: ${dinero(c.deuda)}`, c => c.id);
+    $('formPago').querySelector('button[type=submit]').disabled = deudores.length === 0;
+    $('formPago').querySelector('button[type=submit]').dataset.bloqueado = String(deudores.length === 0);
     opciones($('filtrarPagos'), clientes, c => c.nombre, c => c.id, 'Todos los clientes');
-    tabla('tablaClientes', clientes, 4, c => [c.nombre, c.telefono, dinero(c.deuda), boton('Abonar', () => {
-        $('clientePago').value = c.id; $('montoPago').value = c.deuda.toFixed(2); $('montoPago').focus();
-    }, c.deuda === 0)]);
+    renderTablaClientes();
 }
 async function iniciarClientes() {
     await renderClientes(); await renderPagos();
+    $('buscarCliente').addEventListener('input', renderTablaClientes);
+    if (esAdministrador) iniciarGestionClientes();
     $('filtrarPagos').addEventListener('change', () => renderPagos().catch(e => mensaje('mensajeClientes', e.message, true)));
     formulario('formPago', 'mensajeClientes', async () => {
         const pago = await api('pagos', { clienteId: Number($('clientePago').value), monto: Number($('montoPago').value), metodo: $('metodoPago').value });
@@ -348,13 +375,15 @@ async function iniciarReportes() {
     $('limpiarPeriodo').addEventListener('click', () => {
         $('formPeriodo').reset(); renderReporte().catch(e => mensaje('mensajeReportes', e.message, true));
     });
+    $('exportarCsv').addEventListener('click', () => descargarReporte('csv'));
+    $('exportarPdf').addEventListener('click', () => descargarReporte('pdf'));
 }
 
 async function iniciar() {
     document.querySelectorAll('.sidebar nav a').forEach(enlace => {
         if (new URL(enlace.href).pathname.toLowerCase() === location.pathname.toLowerCase()) enlace.classList.add('active');
     });
-    if (!document.querySelector('form')) return;
+    if (!['listaProductos', 'tablaInventario', 'productoCompra', 'tablaClientes', 'tablaVentas', 'tablaProveedores', 'tablaUsuarios'].some(id => $(id))) return;
     try {
         catalogo = await api('productos');
         if ($('listaProductos')) await iniciarVentas();
@@ -362,9 +391,10 @@ async function iniciar() {
         if ($('productoCompra')) await iniciarCompras();
         if ($('tablaClientes')) await iniciarClientes();
         if ($('tablaVentas')) await iniciarReportes();
+        if ($('tablaProveedores')) await iniciarProveedores();
+        if ($('tablaUsuarios')) await iniciarUsuarios();
     } catch (e) {
-        const id = ['mensajeVenta', 'mensajeInventario', 'mensajeCompra', 'mensajeClientes', 'mensajeReportes'].find(id => $(id));
+        const id = ['mensajeVenta', 'mensajeInventario', 'mensajeCompra', 'mensajeClientes', 'mensajeReportes', 'mensajeProveedores', 'mensajeUsuarios'].find(id => $(id));
         if (id) mensaje(id, e.message, true);
     }
 }
-iniciar();

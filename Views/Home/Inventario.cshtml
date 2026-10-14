@@ -1,11 +1,13 @@
 @{ ViewData["Title"] = "Inventario"; }
-<div class="page-heading"><div><p class="eyebrow">PRODUCTOS</p><h1>Inventario</h1><p>Registra y edita productos, configura la reposición y administra sus alternativas.</p></div><button id="nuevoProducto" type="button" class="primary">Nuevo producto</button></div>
+<div class="page-heading"><div><p class="eyebrow">PRODUCTOS</p><h1>Inventario</h1><p>Consulta productos, precios y existencias.</p></div>@if (User.IsInRole(Tienda_Giovanna.Models.Roles.Administrador)) { <button id="nuevoProducto" type="button" class="primary">Nuevo producto</button> }</div>
 <section class="card">
     <label for="buscarInventario">Buscar por nombre o código</label><input id="buscarInventario" type="search" placeholder="Nombre o código" />
-    <label class="checkbox-label"><input id="mostrarInactivos" type="checkbox" /> Mostrar también productos inactivos</label>
+    @if (User.IsInRole(Tienda_Giovanna.Models.Roles.Administrador)) { <label class="checkbox-label"><input id="mostrarInactivos" type="checkbox" /> Mostrar también productos inactivos</label> }
     <div class="table-wrap"><table><thead><tr><th>Código</th><th>Producto</th><th>Precio</th><th>Stock</th><th>Mínimo</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="tablaInventario"></tbody></table></div>
     <p id="mensajeInventario" class="message" role="status"></p>
 </section>
+@if (User.IsInRole(Tienda_Giovanna.Models.Roles.Administrador))
+{
 <div class="two-columns spaced">
     <section class="card"><h2>Stock mínimo</h2>
         <form id="formStockMinimo">
@@ -39,3 +41,4 @@
         <div class="button-row"><button type="submit" class="primary">Guardar producto</button><button id="cancelarProducto" type="button">Cancelar</button></div>
     </form>
 </dialog>
+}

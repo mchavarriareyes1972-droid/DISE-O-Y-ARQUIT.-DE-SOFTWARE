@@ -14,6 +14,11 @@ const assert = require('node:assert/strict');
         await page.locator('#productoMinimo option').first().waitFor({ state: 'attached' });
     };
     try {
+        await page.goto(base + '/Cuenta/Login');
+        await page.locator('#login').fill('admin');
+        await page.locator('#password').fill('Giovanna2026!');
+        await page.getByRole('button', { name: 'Ingresar', exact: true }).click();
+        await page.waitForURL(base + '/');
         await abrirInventario();
         await page.locator('#nuevoProducto').click();
         await page.locator('#codigoProducto').fill('P001');

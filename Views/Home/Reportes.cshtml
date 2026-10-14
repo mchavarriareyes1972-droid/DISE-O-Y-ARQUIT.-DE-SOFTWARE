@@ -2,7 +2,8 @@
 <div class="page-heading"><div><p class="eyebrow">VENTAS Y REPORTES</p><h1>Historial de ventas</h1><p>Consulta un periodo y revisa el detalle de cada venta.</p></div></div>
 <section class="card">
     <form id="formPeriodo"><div class="form-grid"><div><label for="fechaDesde">Desde</label><input id="fechaDesde" type="date" /></div><div><label for="fechaHasta">Hasta</label><input id="fechaHasta" type="date" /></div></div><div class="button-row"><button type="submit" class="primary">Consultar periodo</button><button type="button" id="limpiarPeriodo">Ver todas</button></div></form>
-    <p class="muted">Las fechas corresponden a la hora de Lima. Los abonos se muestran separados de las ventas al fiado.</p><p id="mensajeReportes" class="message" role="status"></p>
+    <div class="button-row"><button type="button" id="exportarCsv">Descargar CSV</button><button type="button" id="exportarPdf">Descargar PDF</button></div>
+    <p class="muted">Las fechas corresponden a la hora de Lima. Los abonos se muestran separados de las ventas al fiado. Las descargas utilizan las fechas seleccionadas.</p><p id="mensajeReportes" class="message" role="status"></p>
 </section>
 <div class="stats spaced">
     <section class="card"><p>Ventas</p><strong id="reporteCantidad">0</strong></section>

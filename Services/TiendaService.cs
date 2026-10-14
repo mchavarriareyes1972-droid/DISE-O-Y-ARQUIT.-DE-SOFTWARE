@@ -4,7 +4,7 @@ using Tienda_Giovanna.Models;
 namespace Tienda_Giovanna.Services;
 
 // Almacenamiento temporal para practicar los RF. Más adelante se conectará a la BD.
-public class TiendaService
+public partial class TiendaService
 {
     private readonly object bloqueo = new();
     private readonly Func<DateTimeOffset> reloj;
@@ -20,8 +20,8 @@ public class TiendaService
     };
     private readonly List<Cliente> clientes = new()
     {
-        new() { Id = 1, Nombre = "María López", Telefono = "999 111 222", Deuda = 12.50m },
-        new() { Id = 2, Nombre = "José Pérez", Telefono = "988 333 444", Deuda = 8.00m }
+        new() { Id = 1, Documento = "11111111", Nombre = "María López", Telefono = "999 111 222", Deuda = 12.50m },
+        new() { Id = 2, Documento = "22222222", Nombre = "José Pérez", Telefono = "988 333 444", Deuda = 8.00m }
     };
     private readonly List<Venta> ventas = new();
     private readonly List<Pago> pagos = new();
@@ -112,7 +112,7 @@ public class TiendaService
         }
     }
 
-    public List<Cliente> ConsultarClientes() { lock (bloqueo) { return Copia(clientes); } }
+    public List<Cliente> ConsultarClientes(bool incluirInactivos = false) { lock (bloqueo) { return Copia(clientes.Where(c => incluirInactivos || c.Activo).ToList()); } }
     public List<Pago> ConsultarPagos(int? clienteId)
     {
         lock (bloqueo) { return Copia(pagos.Where(p => !clienteId.HasValue || p.ClienteId == clienteId).OrderByDescending(p => p.Id).ToList()); }
@@ -144,7 +144,7 @@ public class TiendaService
                 throw new ArgumentException("El monto recibido no cubre el total.");
             Cliente? cliente = null;
             if (solicitud.FormaPago == "Fiado")
-                cliente = clientes.FirstOrDefault(c => c.Id == solicitud.ClienteId)
+                cliente = clientes.FirstOrDefault(c => c.Id == solicitud.ClienteId && c.Activo)
                     ?? throw new ArgumentException("Selecciona un cliente para la venta al fiado.");
             if (solicitud.FormaPago == "Digital" && string.IsNullOrWhiteSpace(solicitud.ReferenciaPago))
                 throw new ArgumentException("Confirma el pago digital e ingresa su referencia.");
@@ -183,16 +183,26 @@ public class TiendaService
     {
         lock (bloqueo)
         {
-            if (string.IsNullOrWhiteSpace(solicitud.Proveedor) || solicitud.Proveedor.Trim().Length > 80 || solicitud.Cantidad <= 0 || solicitud.CostoUnitario <= 0)
-                throw new ArgumentException("Ingresa proveedor, cantidad y costo unitario mayores que cero.");
-            Producto producto = ObtenerProductoActivo(solicitud.ProductoId);
-            if ((long)producto.Stock + solicitud.Cantidad > int.MaxValue) throw new ArgumentException("La cantidad excede el límite del inventario.");
-            decimal costo = Moneda(solicitud.CostoUnitario);
-            if (costo <= 0) throw new ArgumentException("El costo mínimo es S/ 0.01.");
-            Compra compra = new() { Id = compras.Count + 1, Fecha = reloj(), Proveedor = solicitud.Proveedor.Trim(),
-                ProductoId = producto.Id, ProductoNombre = producto.Nombre, Cantidad = solicitud.Cantidad,
-                CostoUnitario = costo, Total = Moneda(costo * solicitud.Cantidad) };
-            producto.Stock += solicitud.Cantidad;
+            Proveedor proveedor = proveedores.FirstOrDefault(p => p.Id == solicitud.ProveedorId && p.Activo)
+                ?? throw new ArgumentException("Selecciona un proveedor activo registrado.");
+            if (solicitud.Items == null || solicitud.Items.Count == 0 || solicitud.Items.Any(i => i == null || i.Cantidad <= 0 || i.CostoUnitario <= 0))
+                throw new ArgumentException("Agrega productos con cantidades y costos mayores que cero.");
+            if (solicitud.Items.Select(i => i.ProductoId).Distinct().Count() != solicitud.Items.Count)
+                throw new ArgumentException("Cada producto debe aparecer una sola vez en la compra. Edita su cantidad en el detalle.");
+            var detalles = new List<DetalleCompra>();
+            foreach (var linea in solicitud.Items)
+            {
+                Producto producto = ObtenerProductoActivo(linea.ProductoId);
+                if ((long)producto.Stock + linea.Cantidad > int.MaxValue) throw new ArgumentException("La cantidad excede el límite del inventario.");
+                decimal costo = Moneda(linea.CostoUnitario);
+                if (costo <= 0) throw new ArgumentException("El costo mínimo es S/ 0.01.");
+                detalles.Add(new() { ProductoId = producto.Id, Codigo = producto.Codigo, ProductoNombre = producto.Nombre,
+                    Cantidad = linea.Cantidad, CostoUnitario = costo, Subtotal = Moneda(costo * linea.Cantidad) });
+            }
+            // La compra completa se valida antes de reponer cualquier producto.
+            Compra compra = new() { Id = compras.Count + 1, Fecha = reloj(), ProveedorId = proveedor.Id,
+                ProveedorNombre = proveedor.RazonSocial, Detalles = detalles, Total = detalles.Sum(d => d.Subtotal) };
+            foreach (var detalle in detalles) ObtenerProducto(detalle.ProductoId).Stock += detalle.Cantidad;
             compras.Add(compra);
             return Copia(compra);
         }
@@ -244,17 +254,18 @@ public class TiendaService
     {
         lock (bloqueo) { return Copia(ventas.FirstOrDefault(v => v.Id == id) ?? throw new ArgumentException("La venta no existe.")); }
     }
-    public object Reporte(DateOnly? desde, DateOnly? hasta)
+    public ReporteVentas Reporte(DateOnly? desde, DateOnly? hasta)
     {
         lock (bloqueo)
         {
             ValidarPeriodo(desde, hasta);
             var filtradas = ventas.Where(v => EnPeriodo(v.Fecha, desde, hasta)).ToList();
-            return new { CantidadVentas = filtradas.Count, TotalVendido = filtradas.Sum(v => v.Total),
+            return new ReporteVentas { Desde = desde, Hasta = hasta, Generado = reloj(), CantidadVentas = filtradas.Count, TotalVendido = filtradas.Sum(v => v.Total),
                 TotalFiado = filtradas.Where(v => v.FormaPago == "Fiado").Sum(v => v.Total),
                 CobradoEnVentas = filtradas.Where(v => v.FormaPago != "Fiado").Sum(v => v.Total),
                 Abonos = pagos.Where(p => EnPeriodo(p.Fecha, desde, hasta)).Sum(p => p.Monto),
-                ProductosStockBajo = productos.Count(p => p.Activo && p.StockBajo), Ventas = Copia(filtradas.OrderByDescending(v => v.Id).ToList()) };
+                ProductosStockBajo = productos.Count(p => p.Activo && p.StockBajo), Ventas = Copia(filtradas.OrderByDescending(v => v.Id).ToList()),
+                Pagos = Copia(pagos.Where(p => EnPeriodo(p.Fecha, desde, hasta)).OrderByDescending(p => p.Id).ToList()) };
         }
     }
 }

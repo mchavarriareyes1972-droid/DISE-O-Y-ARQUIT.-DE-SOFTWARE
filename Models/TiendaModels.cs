@@ -18,8 +18,11 @@ public class Producto
 public class Cliente
 {
     public int Id { get; set; }
+    public string Documento { get; set; } = "";
     public string Nombre { get; set; } = "";
     public string Telefono { get; set; } = "";
+    public string Direccion { get; set; } = "";
+    public bool Activo { get; set; } = true;
     public decimal Deuda { get; set; }
 }
 
@@ -80,12 +83,20 @@ public class Compra
 {
     public int Id { get; set; }
     public DateTimeOffset Fecha { get; set; }
-    public string Proveedor { get; set; } = "";
+    public int ProveedorId { get; set; }
+    public string ProveedorNombre { get; set; } = "";
+    public List<DetalleCompra> Detalles { get; set; } = new();
+    public decimal Total { get; set; }
+}
+
+public class DetalleCompra
+{
     public int ProductoId { get; set; }
+    public string Codigo { get; set; } = "";
     public string ProductoNombre { get; set; } = "";
     public int Cantidad { get; set; }
     public decimal CostoUnitario { get; set; }
-    public decimal Total { get; set; }
+    public decimal Subtotal { get; set; }
 }
 
 public class LineaVentaSolicitud
@@ -112,7 +123,12 @@ public class PagoSolicitud
 
 public class CompraSolicitud
 {
-    [Required, StringLength(80)] public string Proveedor { get; set; } = "";
+    [Range(1, int.MaxValue)] public int ProveedorId { get; set; }
+    [Required, MinLength(1)] public List<LineaCompraSolicitud> Items { get; set; } = new();
+}
+
+public class LineaCompraSolicitud
+{
     [Range(1, int.MaxValue)] public int ProductoId { get; set; }
     [Range(1, int.MaxValue)] public int Cantidad { get; set; }
     public decimal CostoUnitario { get; set; }

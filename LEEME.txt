@@ -27,3 +27,14 @@ SUBIR A TU REPOSITORIO
 Tras probarlo, conserva una copia de tus cambios locales antes de reemplazar archivos. Copia los archivos de este paquete dentro de la carpeta clonada del repositorio; no copies la carpeta exterior como otro proyecto anidado. Conserva los documentos que ya tengas allí. Abre la solución desde la carpeta clonada, confirma los cambios e insértalos en GitHub. El flujo de Actions comprobará el proyecto al subirlo.
 
 Este avance aún no incluye base de datos, inicio de sesión y roles, gestión completa de productos/proveedores ni exportación de reportes a PDF/CSV. Esas partes de la entrega final deben completarse después.
+INICIO DE SESIÓN Y NUEVOS MÓDULOS
+Administrador de práctica: admin / Giovanna2026!
+Cajero de práctica: cajero / Cajero2026!
+Clientes: registrar y editar datos, activar o desactivar y cobrar abonos.
+Proveedores: registrar distribuidores para seleccionarlos en Compras.
+Compras: agregar varios productos al detalle y registrar una compra completa.
+Reportes: descargar CSV o PDF con las fechas seleccionadas.
+Usuarios: el administrador puede crear cuentas y cambiar sus roles y estado.
+Los datos y usuarios creados se restablecen al detener la aplicación.
+La primera compilación necesita restaurar QuestPDF desde NuGet.
+

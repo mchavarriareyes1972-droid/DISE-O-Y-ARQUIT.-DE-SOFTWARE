@@ -6,6 +6,10 @@ import re
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
+import csv
+import io
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
 base = 'http://127.0.0.1:5099'
@@ -19,7 +23,19 @@ for intento in range(60):
 else:
     raise RuntimeError('La aplicación no inició. Revisa el registro del servidor.')
 
-token = html.unescape(re.search(r'name="__RequestVerificationToken"[^>]*value="([^"]+)"', inicio).group(1))
+def extraer_token(pagina):
+    return html.unescape(re.search(r'name="__RequestVerificationToken"[^>]*value="([^\"]+)"', pagina).group(1))
+
+def iniciar_sesion(usuario, clave):
+    navegador = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    pagina = navegador.open(base + '/Cuenta/Login').read().decode()
+    datos = urllib.parse.urlencode({'Login': usuario, 'Password': clave, '__RequestVerificationToken': extraer_token(pagina)}).encode()
+    resultado = navegador.open(urllib.request.Request(base + '/Cuenta/Login', data=datos))
+    if '/Cuenta/Login' in resultado.url:
+        raise AssertionError('No se pudo iniciar sesión de prueba.')
+    return navegador, extraer_token(resultado.read().decode())
+
+opener, token = iniciar_sesion('admin', 'Giovanna2026!')
 comprobaciones = 0
 
 def check(condicion, mensaje):
@@ -28,24 +44,25 @@ def check(condicion, mensaje):
         raise AssertionError(mensaje)
     comprobaciones += 1
 
-def api(ruta, datos=None, esperado=200, csrf=True):
+def api(ruta, datos=None, esperado=200, csrf=True, conexion=None, raiz="/api/tienda/"):
+    navegador, verificacion = conexion or (opener, token)
     headers = {}
     cuerpo = None
     if datos is not None:
         cuerpo = json.dumps(datos).encode()
         headers['Content-Type'] = 'application/json'
         if csrf:
-            headers['RequestVerificationToken'] = token
-    request = urllib.request.Request(base + '/api/tienda/' + ruta, data=cuerpo, headers=headers)
+            headers['RequestVerificationToken'] = verificacion
+    request = urllib.request.Request(base + raiz + ruta, data=cuerpo, headers=headers)
     try:
-        respuesta = opener.open(request)
+        respuesta = navegador.open(request)
     except urllib.error.HTTPError as error:
         respuesta = error
     contenido = respuesta.read().decode()
     check(respuesta.code == esperado, f'{ruta}: esperaba {esperado}, recibió {respuesta.code}: {contenido}')
     return json.loads(contenido) if contenido else None
 
-for vista in ['Ventas', 'Inventario', 'Compras', 'Clientes', 'Reportes']:
+for vista in ['Ventas', 'Inventario', 'Compras', 'Clientes', 'Reportes', 'Proveedores', 'Usuarios']:
     respuesta = opener.open(base + '/Home/' + vista)
     check(respuesta.code == 200, 'La vista ' + vista + ' debe abrir.')
 
@@ -71,7 +88,7 @@ check(not api('productos?busqueda=P002')[0]['stockBajo'], 'RF05: mínimo configu
 api('alternativas', {'productoId': 6, 'alternativosIds': [7]})
 check(api('productos/6')['alternativas'][0]['id'] == 7, 'RF07: alternativa disponible.')
 api('alternativas', {'productoId': 6, 'alternativosIds': [6]}, esperado=400)
-api('compras', {'proveedor': 'Prueba HTTP', 'productoId': 6, 'cantidad': 2, 'costoUnitario': 1})
+api('compras', {'proveedorId': 1, 'items': [{'productoId': 6, 'cantidad': 2, 'costoUnitario': 1}]})
 check(api('productos?busqueda=P006')[0]['stock'] == 2, 'Compra repone inventario.')
 api('ventas', {'formaPago': 'Efectivo', 'montoRecibido': 3, 'items': [{'productoId': 6, 'cantidad': 2}]})
 hoy = datetime.now(timezone(timedelta(hours=-5))).date().isoformat()
@@ -102,10 +119,96 @@ api('productos/' + pid + '/estado', {'activo': False})
 check(api('productos?busqueda=P008') == [], 'No mostrar inactivos en ventas y compras.')
 check(not api('productos?busqueda=P008&incluirInactivos=true')[0]['activo'], 'Inactivos disponibles en administración.')
 api('ventas', {'formaPago': 'Efectivo', 'montoRecibido': 20, 'items': [{'productoId': atun['id'], 'cantidad': 1}]}, esperado=400)
-api('compras', {'productoId': atun['id'], 'proveedor': 'Prueba', 'cantidad': 1, 'costoUnitario': 1}, esperado=400)
+api('compras', {'proveedorId': 1, 'items': [{'productoId': atun['id'], 'cantidad': 1, 'costoUnitario': 1}]}, esperado=400)
 api('productos', nuevo, esperado=400)
 api('productos/' + pid + '/estado', {'activo': True})
 check(api('productos?busqueda=P008')[0]['stock'] == 18, 'Reactivar conserva stock.')
 api('productos/9999/editar', edicion, esperado=400)
 api('productos/9999/estado', {'activo': False}, esperado=400)
+
+# Clientes y proveedores: identificadores únicos y conservación de historia.
+cliente_datos = {'documento': '33333333', 'nombre': 'Cliente HTTP', 'telefono': '999444555', 'direccion': 'Lima'}
+cliente = api('clientes', cliente_datos)
+cid = str(cliente['id'])
+check(cliente['deuda'] == 0, 'Cliente nuevo sin deuda.')
+api('clientes', cliente_datos, esperado=400)
+api('clientes', {**cliente_datos, 'documento': '123'}, esperado=400)
+api('ventas', {'formaPago': 'Fiado', 'clienteId': cliente['id'], 'items': [{'productoId': 5, 'cantidad': 1}]})
+editado_cliente = api('clientes/' + cid + '/editar', {**cliente_datos, 'nombre': 'Cliente actualizado', 'deuda': 999})
+check(editado_cliente['deuda'] == 2.5, 'No editar deudas mediante el formulario de clientes.')
+api('clientes/' + cid + '/estado', {'activo': False})
+api('ventas', {'formaPago': 'Fiado', 'clienteId': cliente['id'], 'items': [{'productoId': 5, 'cantidad': 1}]}, esperado=400)
+api('pagos', {'clienteId': cliente['id'], 'monto': 2.5, 'metodo': 'Efectivo'})
+api('clientes/' + cid + '/estado', {'activo': True})
+
+proveedor_datos = {'ruc': '20999999999', 'razonSocial': 'Proveedor HTTP', 'correo': 'prueba@example.com'}
+proveedor = api('proveedores', proveedor_datos)
+prid = str(proveedor['id'])
+api('proveedores', proveedor_datos, esperado=400)
+api('proveedores', {**proveedor_datos, 'ruc': '20888888888', 'correo': 'incorrecto'}, esperado=400)
+stock1 = api('productos?busqueda=P001')[0]['stock']
+stock2 = api('productos?busqueda=P002')[0]['stock']
+lineas = [{'productoId': 1, 'cantidad': 2, 'costoUnitario': 3}, {'productoId': 2, 'cantidad': 3, 'costoUnitario': 2}]
+compra_multiple = api('compras', {'proveedorId': proveedor['id'], 'items': lineas})
+check(compra_multiple['total'] == 12 and len(compra_multiple['detalles']) == 2, 'Compra múltiple con subtotal y total.')
+check(api('productos?busqueda=P001')[0]['stock'] == stock1 + 2 and api('productos?busqueda=P002')[0]['stock'] == stock2 + 3, 'Reponer varios productos.')
+api('compras', {'proveedorId': proveedor['id'], 'items': [lineas[0], {**lineas[1], 'productoId': 999}]}, esperado=400)
+check(api('productos?busqueda=P001')[0]['stock'] == stock1 + 2, 'Compra inválida no repone parcialmente.')
+api('compras', {'proveedorId': proveedor['id'], 'items': [lineas[0], lineas[0]]}, esperado=400)
+api('proveedores/' + prid + '/editar', {**proveedor_datos, 'razonSocial': 'Proveedor actualizado'})
+check(api('compras/' + str(compra_multiple['id']))['proveedorNombre'] == 'Proveedor HTTP', 'Compra conserva proveedor original.')
+api('proveedores/' + prid + '/estado', {'activo': False})
+api('compras', {'proveedorId': proveedor['id'], 'items': lineas}, esperado=400)
+
+# Descargas reales: contenido, filtro de fechas y PDF con texto español.
+salida = Path('/tmp/giovanna-qa')
+salida.mkdir(exist_ok=True)
+for formato in ['csv', 'pdf']:
+    respuesta = opener.open(base + '/api/tienda/reporte/exportar/' + formato + '?desde=' + hoy + '&hasta=' + hoy)
+    contenido = respuesta.read()
+    check('attachment' in respuesta.headers['Content-Disposition'], 'Reporte descargable.')
+    if formato == 'csv':
+        filas = list(csv.reader(io.StringIO(contenido.decode('utf-8-sig')), delimiter=';'))
+        check(any(f[0] == 'Abono' for f in filas) and any(f[0] == 'Venta' for f in filas), 'CSV contiene ventas y pagos.')
+    else:
+        check(contenido.startswith(b'%PDF-'), 'PDF real desde la API.')
+    (salida / ('reporte_http.' + formato)).write_bytes(contenido)
+vacio = opener.open(base + '/api/tienda/reporte/exportar/csv?desde=2000-01-01&hasta=2000-01-01').read().decode('utf-8-sig')
+check(not any(f[0] == 'Venta' for f in csv.reader(io.StringIO(vacio), delimiter=';')), 'CSV respeta el periodo.')
+api('reporte/exportar/csv?desde=2026-12-31&hasta=2026-01-01', esperado=400)
+
+# Autorización real: la cuenta de caja consulta y cobra, sin acceso administrativo.
+caja = iniciar_sesion('cajero', 'Cajero2026!')
+api('productos', conexion=caja)
+api('clientes', conexion=caja)
+api('productos', nuevo, esperado=403, conexion=caja)
+api('productos/' + pid + '/editar', edicion, esperado=403, conexion=caja)
+api('stock-minimo', {'productoId': 1, 'stockMinimo': 1}, esperado=403, conexion=caja)
+api('clientes', cliente_datos, esperado=403, conexion=caja)
+api('proveedores', proveedor_datos, esperado=403, conexion=caja)
+api('compras', {'proveedorId': 1, 'items': lineas}, esperado=403, conexion=caja)
+api('compras', esperado=403, conexion=caja)
+api('', esperado=403, conexion=caja, raiz='/api/usuarios')
+api('ventas', {'formaPago': 'Efectivo', 'montoRecibido': 10, 'items': [{'productoId': 5, 'cantidad': 1}]}, conexion=caja)
+api('pagos', {'clienteId': 2, 'monto': 1, 'metodo': 'Efectivo'}, conexion=caja)
+
+# Usuarios, cambio de rol y revocación de cookies existentes.
+usuario_datos = {'login': 'auxiliar', 'nombre': 'Auxiliar HTTP', 'rol': 'Cajero', 'password': 'Prueba2026!'}
+usuario = api('', usuario_datos, raiz='/api/usuarios')
+uid = str(usuario['id'])
+api('', usuario_datos, esperado=400, raiz='/api/usuarios')
+usuarios = api('', raiz='/api/usuarios')
+check(all('passwordHash' not in u and 'password' not in u for u in usuarios), 'No exponer contraseñas ni hashes.')
+api('/1/editar', {'login': 'admin', 'nombre': 'Admin', 'rol': 'Cajero', 'activo': True}, esperado=400, raiz='/api/usuarios')
+anterior = iniciar_sesion('auxiliar', 'Prueba2026!')
+api('/' + uid + '/editar', {**usuario_datos, 'rol': 'Administrador', 'activo': True, 'password': None}, raiz='/api/usuarios')
+api('productos', esperado=401, conexion=anterior)
+nueva = iniciar_sesion('auxiliar', 'Prueba2026!')
+api('', conexion=nueva, raiz='/api/usuarios')
+api('/' + uid + '/editar', {**usuario_datos, 'activo': False, 'password': None}, raiz='/api/usuarios')
+api('productos', esperado=401, conexion=nueva)
+anonimo = (urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())), '')
+api('productos', esperado=401, conexion=anonimo)
+api('productos', nuevo, esperado=401, conexion=anonimo)
 print(f'OK: {comprobaciones} comprobaciones HTTP superadas.')
+

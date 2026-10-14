@@ -414,6 +414,10 @@ th {
 .checkbox-label { display: flex; align-items: center; gap: 8px; font-weight: normal; }
 .checkbox-label input { width: auto; }
 .status.inactive { color: #5d6671; background: #edf0f3; }
+.login-page { display: grid; min-height: 100vh; place-items: center; padding: 20px; }
+.login-card { width: 100%; max-width: 420px; }
+.validation-summary-errors { color: #a12a20; }
+.topbar { flex-wrap: wrap; }
 .page-heading { gap: 16px; flex-wrap: wrap; }
 .low-text, .message.error { color: #a12a20; }
 select[multiple] { min-height: 150px; }
