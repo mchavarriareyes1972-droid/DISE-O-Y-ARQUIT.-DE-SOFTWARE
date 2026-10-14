@@ -10,6 +10,7 @@ public class Producto
     public decimal Precio { get; set; }
     public int Stock { get; set; }
     public int StockMinimo { get; set; } = 5;
+    public bool Activo { get; set; } = true;
     public List<int> AlternativosIds { get; set; } = new();
     public bool StockBajo => Stock <= StockMinimo;
 }
@@ -20,6 +21,24 @@ public class Cliente
     public string Nombre { get; set; } = "";
     public string Telefono { get; set; } = "";
     public decimal Deuda { get; set; }
+}
+
+public class ProductoSolicitud
+{
+    [Required, StringLength(20)] public string Codigo { get; set; } = "";
+    [Required, StringLength(100)] public string Nombre { get; set; } = "";
+    public decimal Precio { get; set; }
+    [Range(0, int.MaxValue)] public int StockMinimo { get; set; }
+}
+
+public class RegistroProductoSolicitud : ProductoSolicitud
+{
+    [Range(0, int.MaxValue)] public int StockInicial { get; set; }
+}
+
+public class EstadoProductoSolicitud
+{
+    [Required] public bool? Activo { get; set; }
 }
 
 public class DetalleVenta

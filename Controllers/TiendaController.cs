@@ -17,8 +17,11 @@ public class TiendaController : ControllerBase
         catch (ArgumentException error) { return BadRequest(new { mensaje = error.Message }); }
         catch (OverflowException) { return BadRequest(new { mensaje = "El importe excede el límite permitido." }); }
     }
-    [HttpGet("productos")] public IActionResult Productos(string? busqueda) => Ok(tienda.BuscarProductos(busqueda));
+    [HttpGet("productos")] public IActionResult Productos(string? busqueda, bool incluirInactivos = false) => Ok(tienda.BuscarProductos(busqueda, incluirInactivos));
     [HttpGet("productos/{id:int}")] public IActionResult Producto(int id) => Operacion(() => tienda.ConsultarProducto(id));
+    [HttpPost("productos"), ValidateAntiForgeryToken] public IActionResult RegistrarProducto(RegistroProductoSolicitud solicitud) => Operacion(() => tienda.RegistrarProducto(solicitud));
+    [HttpPost("productos/{id:int}/editar"), ValidateAntiForgeryToken] public IActionResult EditarProducto(int id, ProductoSolicitud solicitud) => Operacion(() => tienda.EditarProducto(id, solicitud));
+    [HttpPost("productos/{id:int}/estado"), ValidateAntiForgeryToken] public IActionResult EstadoProducto(int id, EstadoProductoSolicitud solicitud) => Operacion(() => tienda.CambiarEstadoProducto(id, solicitud));
     [HttpGet("clientes")] public IActionResult Clientes() => Ok(tienda.ConsultarClientes());
     [HttpGet("pagos")] public IActionResult Pagos(int? clienteId) => Ok(tienda.ConsultarPagos(clienteId));
     [HttpGet("compras")] public IActionResult Compras() => Ok(tienda.ConsultarCompras());

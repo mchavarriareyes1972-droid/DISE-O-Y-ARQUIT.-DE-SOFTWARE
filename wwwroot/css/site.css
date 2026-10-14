@@ -411,6 +411,10 @@ th {
 .spaced { margin-top: 20px; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin-bottom: 14px; }
 .button-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.checkbox-label { display: flex; align-items: center; gap: 8px; font-weight: normal; }
+.checkbox-label input { width: auto; }
+.status.inactive { color: #5d6671; background: #edf0f3; }
+.page-heading { gap: 16px; flex-wrap: wrap; }
 .low-text, .message.error { color: #a12a20; }
 select[multiple] { min-height: 150px; }
 small { display: block; }

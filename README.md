@@ -14,6 +14,7 @@ Abre en el navegador la dirección que indique la consola. En Visual Studio tamb
 
 ## Funciones disponibles
 
+- Gestión de productos en Inventario: registrar, editar, desactivar y reactivar. Los códigos son únicos, incluso para productos inactivos. Las ediciones conservan las existencias y el historial de ventas; el stock inicial solo se ingresa al registrar y las entradas posteriores se hacen en Compras.
 - RF01: buscar productos por código o nombre en Ventas y Compras.
 - RF02: consultar la ficha del producto desde Ventas o Inventario.
 - RF03: consultar el historial y detalle de ventas por periodo, con fechas de Lima.
@@ -40,3 +41,10 @@ dotnet run --project tests/RfChecks/RfChecks.csproj
 ```
 
 GitHub Actions compila el proyecto y ejecuta las comprobaciones en cada actualización.
+
+## Probar la gestión de productos
+
+1. En Inventario, pulsa **Nuevo producto** y registra `P008`, `Atún en lata`, precio `6.50`, stock inicial `20` y mínimo `5`.
+2. Busca el producto en Ventas y registra una venta. Luego edita su nombre y precio desde Inventario: las ventas anteriores deben conservar sus datos originales.
+3. Pulsa **Desactivar**: dejará de aparecer en Ventas y Compras. En Inventario marca **Mostrar también productos inactivos** para consultarlo o activarlo otra vez.
+4. Intenta registrar un código repetido: el servidor debe rechazarlo sin modificar el catálogo.

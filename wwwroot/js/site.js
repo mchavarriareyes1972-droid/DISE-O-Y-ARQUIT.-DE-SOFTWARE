@@ -98,7 +98,7 @@ async function fichaProducto(id) {
         const { producto, alternativas } = await api('productos/' + id);
         const contenido = [elemento('p', `${producto.codigo} · ${producto.nombre}`),
             elemento('p', `Precio: ${dinero(producto.precio)} · Stock: ${producto.stock} · Mínimo: ${producto.stockMinimo}`),
-            elemento('p', producto.stockBajo ? 'Requiere reposición.' : 'Stock disponible.')];
+            elemento('p', !producto.activo ? 'Producto inactivo.' : producto.stockBajo ? 'Requiere reposición.' : 'Stock disponible.')];
         if (producto.stock === 0 && $('listaProductos')) {
             contenido.push(elemento('h3', 'Alternativas disponibles'));
             if (!alternativas.length) contenido.push(elemento('p', 'No hay alternativas con stock registradas.'));
@@ -186,31 +186,93 @@ async function iniciarVentas() {
 }
 
 function renderInventario(productos) {
-    tabla('tablaInventario', productos, 7, p => [p.codigo, p.nombre, dinero(p.precio), p.stock, p.stockMinimo,
-        elemento('span', p.stockBajo ? 'Reponer' : 'Disponible', p.stockBajo ? 'status low' : 'status'), boton('Ficha', () => fichaProducto(p.id))]);
+    tabla('tablaInventario', productos, 7, p => {
+        const acciones = elemento('div', '', 'button-row');
+        acciones.append(boton('Ficha', () => fichaProducto(p.id)), boton('Editar', () => abrirProducto(p)),
+            boton(p.activo ? 'Desactivar' : 'Activar', evento => cambiarEstadoProducto(p, evento.currentTarget)));
+        return [p.codigo, p.nombre, dinero(p.precio), p.stock, p.stockMinimo,
+            elemento('span', !p.activo ? 'Inactivo' : p.stockBajo ? 'Reponer' : 'Disponible',
+                !p.activo ? 'status inactive' : p.stockBajo ? 'status low' : 'status'), acciones];
+    });
 }
-async function iniciarInventario() {
-    renderInventario(catalogo);
+function abrirProducto(producto = null) {
+    $('formProducto').reset();
+    $('productoEditarId').value = producto?.id || '';
+    $('tituloProducto').textContent = producto ? 'Editar producto' : 'Nuevo producto';
+    $('codigoProducto').value = producto?.codigo || '';
+    $('nombreProducto').value = producto?.nombre || '';
+    $('precioProducto').value = producto ? producto.precio.toFixed(2) : '';
+    $('minimoProducto').value = producto?.stockMinimo ?? 5;
+    $('campoStockInicial').hidden = Boolean(producto);
+    $('stockInicialProducto').disabled = Boolean(producto);
+    $('notaStockProducto').textContent = producto
+        ? `Stock actual: ${producto.stock}. Las entradas se registran en Compras. Las ventas anteriores conservan sus precios.`
+        : 'Después del registro, las entradas de stock se realizan en Compras.';
+    mensaje('mensajeProducto', '');
+    $('dialogoProducto').showModal(); $('codigoProducto').focus();
+}
+let revisionInventario = 0;
+async function recargarInventario() {
+    const actual = ++revisionInventario;
+    const parametros = new URLSearchParams({ busqueda: $('buscarInventario').value });
+    if ($('mostrarInactivos').checked) parametros.set('incluirInactivos', 'true');
+    const [activos, encontrados] = await Promise.all([api('productos'), api('productos?' + parametros)]);
+    if (actual !== revisionInventario) return;
+    catalogo = activos; renderInventario(encontrados);
     opciones($('productoMinimo'), catalogo, p => p.nombre, p => p.id);
     opciones($('productoOriginal'), catalogo, p => p.nombre, p => p.id);
-    const minimo = () => { $('stockMinimo').value = catalogo.find(p => p.id === Number($('productoMinimo').value)).stockMinimo; };
-    const alternativas = () => {
-        const original = catalogo.find(p => p.id === Number($('productoOriginal').value));
-        opciones($('productosAlternativos'), catalogo.filter(p => p.id !== original.id), p => p.nombre, p => p.id);
-        [...$('productosAlternativos').options].forEach(o => { o.selected = original.alternativosIds.includes(Number(o.value)); });
-    };
-    minimo(); alternativas();
-    $('productoMinimo').addEventListener('change', minimo); $('productoOriginal').addEventListener('change', alternativas);
-    buscar('buscarInventario', 'mensajeInventario', renderInventario);
+    ['formStockMinimo', 'formAlternativas'].forEach(id => {
+        $(id).querySelectorAll('input, select, button').forEach(control => { control.disabled = catalogo.length === 0; });
+    });
+    cargarMinimo(); cargarAlternativas();
+}
+function cargarMinimo() {
+    const producto = catalogo.find(p => p.id === Number($('productoMinimo').value));
+    $('stockMinimo').value = producto?.stockMinimo ?? '';
+}
+function cargarAlternativas() {
+    const original = catalogo.find(p => p.id === Number($('productoOriginal').value));
+    opciones($('productosAlternativos'), catalogo.filter(p => p.id !== original?.id), p => p.nombre, p => p.id);
+    [...$('productosAlternativos').options].forEach(o => { o.selected = original?.alternativosIds.includes(Number(o.value)) || false; });
+}
+async function cambiarEstadoProducto(producto, control) {
+    control.disabled = true;
+    try {
+        await api(`productos/${producto.id}/estado`, { activo: !producto.activo });
+        await recargarInventario();
+        mensaje('mensajeInventario', producto.activo
+            ? `${producto.nombre} desactivado. Puedes reactivarlo marcando «Mostrar también productos inactivos».`
+            : `${producto.nombre} activado.`);
+    } catch (error) { mensaje('mensajeInventario', error.message, true); }
+    finally { control.disabled = false; }
+}
+async function iniciarInventario() {
+    await recargarInventario();
+    $('nuevoProducto').addEventListener('click', () => abrirProducto());
+    $('cancelarProducto').addEventListener('click', () => $('dialogoProducto').close());
+    $('productoMinimo').addEventListener('change', cargarMinimo);
+    $('productoOriginal').addEventListener('change', cargarAlternativas);
+    // Las revisiones impiden que una respuesta antigua reemplace la búsqueda actual.
+    const actualizar = () => recargarInventario().catch(e => mensaje('mensajeInventario', e.message, true));
+    $('buscarInventario').addEventListener('input', actualizar);
+    $('mostrarInactivos').addEventListener('change', actualizar);
+    formulario('formProducto', 'mensajeProducto', async () => {
+        const id = $('productoEditarId').value;
+        const datos = { codigo: $('codigoProducto').value, nombre: $('nombreProducto').value,
+            precio: Number($('precioProducto').value), stockMinimo: Number($('minimoProducto').value) };
+        if (!id) datos.stockInicial = Number($('stockInicialProducto').value);
+        const producto = await api(id ? `productos/${id}/editar` : 'productos', datos);
+        await recargarInventario(); $('dialogoProducto').close();
+        mensaje('mensajeInventario', `${producto.nombre}: producto ${id ? 'actualizado' : 'registrado'}.`);
+    });
     formulario('formStockMinimo', 'mensajeInventario', async () => {
         await api('stock-minimo', { productoId: Number($('productoMinimo').value), stockMinimo: Number($('stockMinimo').value) });
-        catalogo = await api('productos');
-        renderInventario(await api('productos?busqueda=' + encodeURIComponent($('buscarInventario').value)));
+        await recargarInventario();
         mensaje('mensajeInventario', 'Stock mínimo actualizado.');
     });
     formulario('formAlternativas', 'mensajeInventario', async () => {
         await api('alternativas', { productoId: Number($('productoOriginal').value), alternativosIds: [...$('productosAlternativos').selectedOptions].map(o => Number(o.value)) });
-        catalogo = await api('productos'); mensaje('mensajeInventario', 'Alternativas registradas.');
+        await recargarInventario(); mensaje('mensajeInventario', 'Alternativas registradas.');
     });
 }
 

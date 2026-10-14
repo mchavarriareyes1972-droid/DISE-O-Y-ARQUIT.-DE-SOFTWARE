@@ -18,11 +18,17 @@ jobs:
         run: dotnet run --project tests/RfChecks/RfChecks.csproj
       - name: Revisar sintaxis de JavaScript
         run: node --check wwwroot/js/site.js
-      - name: Comprobar páginas y operaciones HTTP
+      - name: Preparar Chromium para probar productos
+        run: |
+          npm install --prefix /tmp/giovanna-ui --no-save playwright@1.62.1
+          /tmp/giovanna-ui/node_modules/.bin/playwright install --with-deps chromium
+      - name: Comprobar operaciones HTTP y gestión de productos en pantalla
         env:
           ASPNETCORE_ENVIRONMENT: Development
+          NODE_PATH: /tmp/giovanna-ui/node_modules
         run: |
           dotnet run --no-build --no-launch-profile --project Tienda_Giovanna.csproj --urls http://127.0.0.1:5099 > /tmp/giovanna.log 2>&1 &
           servidor=$!
           trap 'kill "$servidor"' EXIT
           python3 tests/http_checks.py
+          node tests/browser_products.cjs

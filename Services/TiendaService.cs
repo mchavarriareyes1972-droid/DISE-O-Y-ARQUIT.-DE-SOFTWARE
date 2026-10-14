@@ -33,14 +33,72 @@ public class TiendaService
     private static decimal Moneda(decimal valor) => decimal.Round(valor, 2, MidpointRounding.AwayFromZero);
     private Producto ObtenerProducto(int id) => productos.FirstOrDefault(p => p.Id == id)
         ?? throw new ArgumentException("El producto no existe.");
+    private Producto ObtenerProductoActivo(int id)
+    {
+        Producto producto = ObtenerProducto(id);
+        if (!producto.Activo) throw new ArgumentException("El producto está inactivo. Actívalo desde Inventario para utilizarlo.");
+        return producto;
+    }
 
-    public List<Producto> BuscarProductos(string? busqueda)
+    private (string Codigo, string Nombre, decimal Precio) ValidarProducto(ProductoSolicitud solicitud, int? id = null)
+    {
+        string codigo = (solicitud.Codigo ?? "").Trim().ToUpperInvariant();
+        string nombre = (solicitud.Nombre ?? "").Trim();
+        if (codigo.Length == 0 || codigo.Length > 20) throw new ArgumentException("El código debe tener entre 1 y 20 caracteres.");
+        if (nombre.Length == 0 || nombre.Length > 100) throw new ArgumentException("El nombre debe tener entre 1 y 100 caracteres.");
+        if (productos.Any(p => p.Id != id && p.Codigo.Equals(codigo, StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException("Ya existe un producto con ese código, incluso si está inactivo.");
+        if (solicitud.Precio <= 0) throw new ArgumentException("El precio debe ser mayor que cero.");
+        decimal precio = Moneda(solicitud.Precio);
+        if (precio <= 0) throw new ArgumentException("El precio mínimo es S/ 0.01.");
+        if (solicitud.StockMinimo < 0) throw new ArgumentException("El stock mínimo no puede ser negativo.");
+        return (codigo, nombre, precio);
+    }
+
+    public Producto RegistrarProducto(RegistroProductoSolicitud solicitud)
+    {
+        lock (bloqueo)
+        {
+            var datos = ValidarProducto(solicitud);
+            if (solicitud.StockInicial < 0) throw new ArgumentException("El stock inicial no puede ser negativo.");
+            Producto producto = new() { Id = productos.Max(p => p.Id) + 1, Codigo = datos.Codigo,
+                Nombre = datos.Nombre, Precio = datos.Precio, Stock = solicitud.StockInicial, StockMinimo = solicitud.StockMinimo };
+            productos.Add(producto);
+            return Copia(producto);
+        }
+    }
+
+    public Producto EditarProducto(int id, ProductoSolicitud solicitud)
+    {
+        lock (bloqueo)
+        {
+            Producto producto = ObtenerProducto(id);
+            var datos = ValidarProducto(solicitud, id);
+            producto.Codigo = datos.Codigo; producto.Nombre = datos.Nombre;
+            producto.Precio = datos.Precio; producto.StockMinimo = solicitud.StockMinimo;
+            // El stock y las ventas anteriores se conservan; las entradas se registran en Compras.
+            return Copia(producto);
+        }
+    }
+
+    public Producto CambiarEstadoProducto(int id, EstadoProductoSolicitud solicitud)
+    {
+        lock (bloqueo)
+        {
+            Producto producto = ObtenerProducto(id);
+            producto.Activo = solicitud.Activo ?? throw new ArgumentException("Indica si deseas activar o desactivar el producto.");
+            return Copia(producto);
+        }
+    }
+
+    public List<Producto> BuscarProductos(string? busqueda, bool incluirInactivos = false)
     {
         lock (bloqueo)
         {
             string texto = (busqueda ?? "").Trim();
-            return Copia(productos.Where(p => p.Nombre.Contains(texto, StringComparison.OrdinalIgnoreCase)
-                || p.Codigo.Contains(texto, StringComparison.OrdinalIgnoreCase)).ToList());
+            return Copia(productos.Where(p => (incluirInactivos || p.Activo) &&
+                (p.Nombre.Contains(texto, StringComparison.OrdinalIgnoreCase)
+                || p.Codigo.Contains(texto, StringComparison.OrdinalIgnoreCase))).ToList());
         }
     }
 
@@ -50,7 +108,7 @@ public class TiendaService
         {
             Producto producto = ObtenerProducto(id);
             return new { Producto = Copia(producto), Alternativas = Copia(productos.Where(p =>
-                producto.AlternativosIds.Contains(p.Id) && p.Stock > 0).ToList()) };
+                producto.AlternativosIds.Contains(p.Id) && p.Activo && p.Stock > 0).ToList()) };
         }
     }
 
@@ -73,7 +131,7 @@ public class TiendaService
             var detalles = new List<DetalleVenta>();
             foreach (var grupo in solicitud.Items.GroupBy(i => i.ProductoId))
             {
-                Producto producto = ObtenerProducto(grupo.Key);
+                Producto producto = ObtenerProductoActivo(grupo.Key);
                 long cantidad = grupo.Sum(i => (long)i.Cantidad);
                 if (cantidad > producto.Stock) throw new ArgumentException($"Stock insuficiente de {producto.Nombre}. Disponible: {producto.Stock}.");
                 detalles.Add(new DetalleVenta { ProductoId = producto.Id, Codigo = producto.Codigo,
@@ -127,7 +185,7 @@ public class TiendaService
         {
             if (string.IsNullOrWhiteSpace(solicitud.Proveedor) || solicitud.Proveedor.Trim().Length > 80 || solicitud.Cantidad <= 0 || solicitud.CostoUnitario <= 0)
                 throw new ArgumentException("Ingresa proveedor, cantidad y costo unitario mayores que cero.");
-            Producto producto = ObtenerProducto(solicitud.ProductoId);
+            Producto producto = ObtenerProductoActivo(solicitud.ProductoId);
             if ((long)producto.Stock + solicitud.Cantidad > int.MaxValue) throw new ArgumentException("La cantidad excede el límite del inventario.");
             decimal costo = Moneda(solicitud.CostoUnitario);
             if (costo <= 0) throw new ArgumentException("El costo mínimo es S/ 0.01.");
@@ -155,11 +213,11 @@ public class TiendaService
     {
         lock (bloqueo)
         {
-            Producto producto = ObtenerProducto(solicitud.ProductoId);
+            Producto producto = ObtenerProductoActivo(solicitud.ProductoId);
             List<int> ids = (solicitud.AlternativosIds ?? new()).Distinct().ToList();
             foreach (int id in ids)
             {
-                ObtenerProducto(id);
+                ObtenerProductoActivo(id);
                 if (id == producto.Id) throw new ArgumentException("Un producto no puede ser su propia alternativa.");
             }
             producto.AlternativosIds = ids;
@@ -196,7 +254,7 @@ public class TiendaService
                 TotalFiado = filtradas.Where(v => v.FormaPago == "Fiado").Sum(v => v.Total),
                 CobradoEnVentas = filtradas.Where(v => v.FormaPago != "Fiado").Sum(v => v.Total),
                 Abonos = pagos.Where(p => EnPeriodo(p.Fecha, desde, hasta)).Sum(p => p.Monto),
-                ProductosStockBajo = productos.Count(p => p.StockBajo), Ventas = Copia(filtradas.OrderByDescending(v => v.Id).ToList()) };
+                ProductosStockBajo = productos.Count(p => p.Activo && p.StockBajo), Ventas = Copia(filtradas.OrderByDescending(v => v.Id).ToList()) };
         }
     }
 }
