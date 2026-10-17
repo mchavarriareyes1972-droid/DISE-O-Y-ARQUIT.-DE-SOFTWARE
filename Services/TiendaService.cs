@@ -3,13 +3,15 @@ using Tienda_Giovanna.Models;
 
 namespace Tienda_Giovanna.Services;
 
-// Clientes puede usar SQL; los otros modulos conservan su almacenamiento de practica.
+// Clientes y proveedores pueden usar SQL; los movimientos conservan su almacenamiento de practica.
 public partial class TiendaService
 {
     private readonly object bloqueo = new();
     private readonly Func<DateTimeOffset> reloj;
     private readonly ClientesSqlService? clientesSql;
+    private readonly ProveedoresSqlService? proveedoresSql;
     public bool ClientesEnSql => clientesSql != null;
+    public bool ProveedoresEnSql => proveedoresSql != null;
     public const string MovimientosPendientes = "El registro de nuevos fiados y abonos estará disponible al completar la conexión de ventas y pagos. Puedes consultar los saldos y pagos existentes.";
     private readonly List<Producto> productos = new()
     {
@@ -32,7 +34,11 @@ public partial class TiendaService
 
     public TiendaService() : this(() => DateTimeOffset.UtcNow) { }
     public TiendaService(Func<DateTimeOffset> reloj) { this.reloj = reloj; }
-    public TiendaService(ClientesSqlService clientesSql) : this() { this.clientesSql = clientesSql; }
+    public TiendaService(ClientesSqlService? clientesSql, ProveedoresSqlService? proveedoresSql = null) : this()
+    {
+        this.clientesSql = clientesSql;
+        this.proveedoresSql = proveedoresSql;
+    }
     private static T Copia<T>(T valor) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(valor))!;
     private static decimal Moneda(decimal valor) => decimal.Round(valor, 2, MidpointRounding.AwayFromZero);
     private Producto ObtenerProducto(int id) => productos.FirstOrDefault(p => p.Id == id)
@@ -194,7 +200,8 @@ public partial class TiendaService
     {
         lock (bloqueo)
         {
-            Proveedor proveedor = proveedores.FirstOrDefault(p => p.Id == solicitud.ProveedorId && p.Activo)
+            Proveedor proveedor = proveedoresSql != null ? proveedoresSql.ConsultarProveedorActivo(solicitud.ProveedorId)
+                : proveedores.FirstOrDefault(p => p.Id == solicitud.ProveedorId && p.Activo)
                 ?? throw new ArgumentException("Selecciona un proveedor activo registrado.");
             if (solicitud.Items == null || solicitud.Items.Count == 0 || solicitud.Items.Any(i => i == null || i.Cantidad <= 0 || i.CostoUnitario <= 0))
                 throw new ArgumentException("Agrega productos con cantidades y costos mayores que cero.");

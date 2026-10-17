@@ -11,6 +11,7 @@ jobs:
     env:
       Persistencia__Usuarios: SqlServer
       Persistencia__Clientes: SqlServer
+      Persistencia__Proveedores: SqlServer
       ASPNETCORE_ENVIRONMENT: Development
     steps:
       - uses: actions/checkout@v4
@@ -23,7 +24,7 @@ jobs:
         run: dotnet build Tienda_Giovanna.csproj
       - name: Probar autenticacion, persistencia, restricciones y Singleton
         run: dotnet run --project tests/SqlChecks/SqlChecks.csproj
-      - name: Preparar Chromium para probar clientes de SQL
+      - name: Preparar Chromium para probar clientes y proveedores de SQL
         run: |
           npm install --prefix /tmp/giovanna-ui --no-save playwright@1.62.1
           /tmp/giovanna-ui/node_modules/.bin/playwright install --with-deps chromium
@@ -41,6 +42,7 @@ jobs:
           servidor=$!
           python3 tests/http_sql_checks.py --verificar-reinicio
           node tests/browser_clientes_sql.cjs
+          node tests/browser_proveedores_sql.cjs
       - name: Reporte de la aplicacion
         if: always()
         uses: actions/upload-artifact@v4

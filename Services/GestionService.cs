@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-using System.Text.RegularExpressions;
 using Tienda_Giovanna.Models;
 
 namespace Tienda_Giovanna.Services;
@@ -11,13 +9,6 @@ public partial class TiendaService
     {
         new() { Id = 1, Ruc = "20123456789", RazonSocial = "Distribuidora de práctica", Contacto = "Ana", Telefono = "999222333" }
     };
-    private static string Texto(string? valor, int maximo, string campo, bool obligatorio = false)
-    {
-        string texto = (valor ?? "").Trim();
-        if ((obligatorio && texto.Length == 0) || texto.Length > maximo)
-            throw new ArgumentException($"Revisa el campo {campo} (máximo {maximo} caracteres).");
-        return texto;
-    }
     private Cliente ValidarCliente(ClienteSolicitud solicitud, int? id = null)
     {
         Cliente datos = ClientesValidacion.Validar(solicitud);
@@ -61,21 +52,18 @@ public partial class TiendaService
     }
     public List<Proveedor> ConsultarProveedores(bool incluirInactivos = false)
     {
+        if (proveedoresSql != null) return proveedoresSql.ConsultarProveedores(incluirInactivos);
         lock (bloqueo) { return Copia(proveedores.Where(p => incluirInactivos || p.Activo).ToList()); }
     }
     private Proveedor ValidarProveedor(ProveedorSolicitud solicitud, int? id = null)
     {
-        string ruc = Texto(solicitud.Ruc, 11, "RUC", true);
-        if (!Regex.IsMatch(ruc, @"^[0-9]{11}$")) throw new ArgumentException("El RUC debe tener 11 dígitos.");
-        if (proveedores.Any(p => p.Id != id && p.Ruc == ruc)) throw new ArgumentException("Ya existe un proveedor con ese RUC, incluso si está inactivo.");
-        string correo = Texto(solicitud.Correo, 100, "correo");
-        if (correo.Length > 0 && !new EmailAddressAttribute().IsValid(correo)) throw new ArgumentException("El correo no es válido.");
-        return new() { Ruc = ruc, RazonSocial = Texto(solicitud.RazonSocial, 100, "razón social", true),
-            Contacto = Texto(solicitud.Contacto, 100, "contacto"), Telefono = Texto(solicitud.Telefono, 20, "teléfono"),
-            Correo = correo, Direccion = Texto(solicitud.Direccion, 150, "dirección") };
+        Proveedor datos = ProveedoresValidacion.Validar(solicitud);
+        if (proveedores.Any(p => p.Id != id && p.Ruc == datos.Ruc)) throw new ArgumentException("Ya existe un proveedor con ese RUC, incluso si está inactivo.");
+        return datos;
     }
     public Proveedor RegistrarProveedor(ProveedorSolicitud solicitud)
     {
+        if (proveedoresSql != null) return proveedoresSql.RegistrarProveedor(solicitud);
         lock (bloqueo)
         {
             Proveedor proveedor = ValidarProveedor(solicitud);
@@ -86,6 +74,7 @@ public partial class TiendaService
     }
     public Proveedor EditarProveedor(int id, ProveedorSolicitud solicitud)
     {
+        if (proveedoresSql != null) return proveedoresSql.EditarProveedor(id, solicitud);
         lock (bloqueo)
         {
             Proveedor proveedor = proveedores.FirstOrDefault(p => p.Id == id) ?? throw new ArgumentException("El proveedor no existe.");
@@ -97,6 +86,7 @@ public partial class TiendaService
     }
     public Proveedor CambiarEstadoProveedor(int id, EstadoSolicitud solicitud)
     {
+        if (proveedoresSql != null) return proveedoresSql.CambiarEstadoProveedor(id, solicitud);
         lock (bloqueo)
         {
             Proveedor proveedor = proveedores.FirstOrDefault(p => p.Id == id) ?? throw new ArgumentException("El proveedor no existe.");

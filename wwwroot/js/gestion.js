@@ -57,7 +57,11 @@ function renderTablaProveedores() {
         return [p.ruc, p.razonSocial, p.contacto, p.telefono, p.correo, p.activo ? 'Activo' : 'Inactivo', acciones];
     });
 }
-async function renderProveedores() { proveedoresCatalogo = await api('proveedores?incluirInactivos=true'); renderTablaProveedores(); }
+async function renderProveedores() {
+    proveedoresCatalogo = await api('proveedores?incluirInactivos=true');
+    $('cantidadProveedores').textContent = `Proveedores registrados: ${proveedoresCatalogo.length} · Activos: ${proveedoresCatalogo.filter(p => p.activo).length}`;
+    renderTablaProveedores();
+}
 function abrirProveedor(p = null) {
     $('formProveedor').reset(); $('proveedorEditarId').value = p?.id || '';
     $('tituloProveedor').textContent = p ? 'Editar proveedor' : 'Nuevo proveedor';

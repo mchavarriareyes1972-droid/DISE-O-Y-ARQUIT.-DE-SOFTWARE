@@ -10,6 +10,7 @@ jobs:
     env:
       Persistencia__Usuarios: Memoria
       Persistencia__Clientes: Memoria
+      Persistencia__Proveedores: Memoria
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

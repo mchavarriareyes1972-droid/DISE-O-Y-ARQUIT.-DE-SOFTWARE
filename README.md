@@ -47,7 +47,7 @@ Server=localhost;Database=BodegaGiovanna;Integrated Security=True;Encrypt=True;T
 
 `TrustServerCertificate=True` permite el certificado local de esta instalación de prácticas. Si otro compañero ejecuta el proyecto, debe cambiar el nombre del servidor en su configuración; no necesita la contraseña de Windows en la cadena. También se puede sustituir la conexión con la variable `ConnectionStrings__BodegaGiovanna`.
 
-Los modos `Persistencia:Usuarios=Memoria` y `Persistencia:Clientes=Memoria` se conservan **solo como selección explícita para pruebas sin SQL**. Ambos valores predeterminados son `SqlServer`: un fallo de conexión no activa cuentas ni clientes alternativos ni cambia automáticamente a memoria. Para ejecutar todas las pruebas HTTP sin SQL, configura las dos variables `Persistencia__Usuarios=Memoria` y `Persistencia__Clientes=Memoria`.
+Los modos `Persistencia:Usuarios=Memoria`, `Persistencia:Clientes=Memoria` y `Persistencia:Proveedores=Memoria` se conservan **solo como selección explícita para pruebas sin SQL**. Los tres valores predeterminados son `SqlServer`: un fallo de conexión no activa registros alternativos ni cambia automáticamente a memoria. Para ejecutar todas las pruebas HTTP sin SQL, configura las tres variables `Persistencia__Usuarios=Memoria`, `Persistencia__Clientes=Memoria` y `Persistencia__Proveedores=Memoria`.
 
 ## Clientes conectados a SQL Server
 
@@ -61,6 +61,16 @@ La deuda se obtiene de `vw_SaldosClientes` (saldo inicial + ventas al fiado - ab
 4. Desactiva y reactiva ese cliente. El cajero puede consultar los datos; solo el administrador puede modificarlos.
 
 **Alcance de esta etapa:** el registro de nuevos fiados y abonos queda temporalmente deshabilitado en modo SQL hasta migrar ventas y pagos. Las pantallas lo indican y la API también rechaza esas operaciones antes de cambiar stock o saldos. Así se evita registrar movimientos temporales sobre clientes reales de la base. La consulta de saldos e historial sí funciona. Las ventas en efectivo o digitales siguen siendo prácticas en memoria; los reportes aún corresponden a esos movimientos temporales. No ejecutes nuevamente los scripts ni vacíes las tablas.
+
+## Proveedores conectados a SQL Server
+
+`Services/ProveedoresSqlService.cs` usa el mismo Singleton `ConexionBD` para consultar, registrar, editar y activar o desactivar proveedores. Las consultas son parametrizadas, cada operación libera su conexión y las escrituras se confirman en una transacción. SQL Server asigna el identificador y garantiza el RUC único incluso para proveedores inactivos y registros simultáneos. Se validan los 11 dígitos del RUC, el correo opcional y los tamaños de los campos; no se consulta SUNAT.
+
+1. Actualiza `avance-rf-csharp`, ejecuta con F5 y abre **Proveedores** como administrador: con la carga original verás **12 proveedores registrados**, sus contactos y estados.
+2. Busca por razón social o RUC, registra un proveedor de prueba y edita sus datos. Detén y vuelve a ejecutar: los cambios permanecen. Confírmalos con `SELECT * FROM Proveedores` en SSMS.
+3. Desactiva y reactiva el proveedor. El listado de Compras solo ofrece proveedores activos y comprueba su estado nuevamente antes de registrar la compra de práctica.
+
+Los datos históricos en `Compras` y `DetalleCompras` no se modifican al editar o desactivar un proveedor. El acceso a Proveedores y Compras sigue reservado al administrador. **Las compras aún se registran en memoria**: la pantalla lo indica. Reconocen los proveedores reales de SQL, incluidos los recién creados, pero sus importes y existencias no se escriben todavía en las tablas de movimientos. No es necesario ejecutar scripts nuevos.
 
 ## Funciones disponibles
 
@@ -86,6 +96,8 @@ La deuda se obtiene de `vw_SaldosClientes` (saldo inicial + ventas al fiado - ab
 - `Services/GestionService.cs`: segunda parte del mismo servicio para clientes y proveedores; delega clientes a SQL cuando está configurado.
 - `Services/ClientesSqlService.cs`: persistencia de clientes y consulta de sus saldos e historial.
 - `Services/ClientesValidacion.cs`: validación de DNI y campos de clientes, compartida por SQL y las pruebas en memoria.
+- `Services/ProveedoresSqlService.cs`: persistencia de proveedores y consulta del proveedor activo para las compras de práctica.
+- `Services/ProveedoresValidacion.cs`: validación compartida de RUC, correo y campos del proveedor.
 - `Datos/ConexionBD.cs`: Singleton que configura y crea conexiones a SQL Server.
 - `Services/IUsuariosService.cs`: contrato común de cuentas y sesiones.
 - `Services/UsuariosSqlService.cs`: cuentas, contraseñas y validación de sesiones persistidas.
@@ -95,7 +107,7 @@ La deuda se obtiene de `vw_SaldosClientes` (saldo inicial + ventas al fiado - ab
 - `Views/Home`: pantallas MVC.
 - `wwwroot/js/site.js`: presenta las respuestas de C# y envía las operaciones.
 
-**Etapa actual:** el inicio de sesión, la validación de sesiones, la gestión de usuarios y la gestión de clientes usan SQL Server. Clientes muestra las personas, deudas e historial de pagos cargados en SQL. Productos, proveedores, ventas, compras y reportes todavía usan TiendaService en memoria; sus pantallas aún no muestran los 120 productos ni el historial de ventas o compras cargado en SQL. Los nuevos fiados y abonos se habilitarán al completar esa migración. Reiniciar conserva las cuentas y clientes de SQL, cierra las sesiones y restablece los movimientos de práctica en memoria. La referencia de pago digital se confirma manualmente; no existe integración con Yape o Plin.
+**Etapa actual:** el inicio de sesión, la validación de sesiones y la gestión de usuarios, clientes y proveedores usan SQL Server. Clientes muestra las personas, deudas e historial de pagos cargados en SQL; Proveedores muestra los 12 distribuidores originales y los que registres. Productos, ventas, compras y reportes todavía usan TiendaService en memoria; sus pantallas aún no muestran los 120 productos ni el historial de ventas o compras cargado en SQL. Los nuevos fiados y abonos se habilitarán al completar esa migración. Reiniciar conserva las cuentas, clientes y proveedores de SQL, cierra las sesiones y restablece los movimientos de práctica en memoria. La referencia de pago digital se confirma manualmente; no existe integración con Yape o Plin.
 
 La exportación PDF usa QuestPDF 2026.9.1 con licencia Community para este proyecto académico. Visual Studio restaura el paquete NuGet al compilar por primera vez; después la generación se realiza localmente.
 
@@ -116,4 +128,4 @@ GitHub Actions compila el proyecto y ejecuta las comprobaciones en cada actualiz
 
 ## Pruebas con SQL Server
 
-El flujo `verificar-sql.yml` crea un SQL Server 2022 temporal, ejecuta los dos scripts completos, comprueba los hashes de las cuentas con PasswordHasher de .NET y prueba el Singleton, persistencia, bloqueos, permisos y operaciones HTTP. Para clientes comprueba DNI único ante concurrencia, conservación de deuda e historial, filtros, permisos y protección antifalsificación; además reinicia el servidor web para comprobar la persistencia de una edición y baja, y prueba la reactivación. Las claves del contenedor y de las cuentas se generan al ejecutar CI; no se almacenan en el repositorio. La autenticación SQL del contenedor solo se usa en CI; la configuración local sigue usando Windows. La conexión a localhost debe comprobarse desde ese equipo.
+El flujo `verificar-sql.yml` crea un SQL Server 2022 temporal, ejecuta los dos scripts completos, comprueba los hashes de las cuentas con PasswordHasher de .NET y prueba el Singleton, persistencia, bloqueos, permisos y operaciones HTTP. Para clientes comprueba DNI único ante concurrencia, conservación de deuda e historial, filtros, permisos y protección antifalsificación. Para proveedores comprueba RUC único, campos opcionales, validación de correo, conservación de compras históricas y selección de proveedores activos en Compras. Además reinicia el servidor web para comprobar la persistencia de ediciones y bajas, y prueba las reactivaciones. Chromium verifica los recorridos de ambas pantallas y sus permisos. Las claves del contenedor y de las cuentas se generan al ejecutar CI; no se almacenan en el repositorio. La autenticación SQL del contenedor solo se usa en CI; la configuración local sigue usando Windows. La conexión a localhost debe comprobarse desde ese equipo.

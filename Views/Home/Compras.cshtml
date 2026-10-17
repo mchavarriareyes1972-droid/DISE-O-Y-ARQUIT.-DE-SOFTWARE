@@ -1,5 +1,10 @@
+@inject Tienda_Giovanna.Services.TiendaService Tienda
 @{ ViewData["Title"] = "Compras"; }
 <div class="page-heading"><div><p class="eyebrow">ABASTECIMIENTO</p><h1>Compras</h1><p>Registra varios productos recibidos de un proveedor.</p></div></div>
+@if (Tienda.ProveedoresEnSql)
+{
+    <p class="notice">Los proveedores se consultan desde la base de datos. Las compras y existencias de esta pantalla siguen siendo de práctica y se restablecen al cerrar el programa.</p>
+}
 <section class="card">
     <label for="proveedorCompra">Proveedor registrado</label><select id="proveedorCompra" required></select><p id="avisoProveedor" class="muted"></p>
     <form id="formLineaCompra"><div class="form-grid">

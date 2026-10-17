@@ -1,5 +1,5 @@
 @{ ViewData["Title"] = "Proveedores"; }
-<div class="page-heading"><div><p class="eyebrow">ABASTECIMIENTO</p><h1>Proveedores</h1><p>Administra distribuidores y sus datos de contacto.</p></div><button id="nuevoProveedor" type="button" class="primary">Nuevo proveedor</button></div>
+<div class="page-heading"><div><p class="eyebrow">ABASTECIMIENTO</p><h1>Proveedores</h1><p>Administra distribuidores y sus datos de contacto.</p><p id="cantidadProveedores" class="muted" role="status"></p></div><button id="nuevoProveedor" type="button" class="primary">Nuevo proveedor</button></div>
 <section class="card"><label for="buscarProveedor">Buscar por razón social o RUC</label><input id="buscarProveedor" type="search" /><div class="table-wrap"><table><thead><tr><th>RUC</th><th>Razón social</th><th>Contacto</th><th>Teléfono</th><th>Correo</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="tablaProveedores"></tbody></table></div><p id="mensajeProveedores" class="message" role="status"></p></section>
 <dialog id="dialogoProveedor" aria-labelledby="tituloProveedor"><h2 id="tituloProveedor">Nuevo proveedor</h2>
     <form id="formProveedor"><input id="proveedorEditarId" type="hidden" /><div class="form-grid">

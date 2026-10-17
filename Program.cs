@@ -10,9 +10,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllersWithViews();
 string persistenciaUsuarios = builder.Configuration["Persistencia:Usuarios"] ?? "SqlServer";
 string persistenciaClientes = builder.Configuration["Persistencia:Clientes"] ?? "SqlServer";
-if (persistenciaUsuarios is not ("SqlServer" or "Memoria") || persistenciaClientes is not ("SqlServer" or "Memoria"))
-    throw new InvalidOperationException("Persistencia:Usuarios y Persistencia:Clientes deben ser SqlServer o Memoria.");
-if (persistenciaUsuarios == "SqlServer" || persistenciaClientes == "SqlServer")
+string persistenciaProveedores = builder.Configuration["Persistencia:Proveedores"] ?? "SqlServer";
+if (new[] { persistenciaUsuarios, persistenciaClientes, persistenciaProveedores }.Any(modo => modo is not ("SqlServer" or "Memoria")))
+    throw new InvalidOperationException("Persistencia:Usuarios, Clientes y Proveedores deben ser SqlServer o Memoria.");
+if (new[] { persistenciaUsuarios, persistenciaClientes, persistenciaProveedores }.Contains("SqlServer"))
 {
     ConexionBD.Instancia.Configurar(builder.Configuration.GetConnectionString("BodegaGiovanna") ?? "");
     builder.Services.AddSingleton(ConexionBD.Instancia);
@@ -22,11 +23,10 @@ if (persistenciaUsuarios == "SqlServer")
 else
     builder.Services.AddSingleton<IUsuariosService, UsuariosMemoriaService>();
 if (persistenciaClientes == "SqlServer")
-{
     builder.Services.AddSingleton<ClientesSqlService>();
-    builder.Services.AddSingleton(sp => new TiendaService(sp.GetRequiredService<ClientesSqlService>()));
-}
-else builder.Services.AddSingleton(new TiendaService());
+if (persistenciaProveedores == "SqlServer")
+    builder.Services.AddSingleton<ProveedoresSqlService>();
+builder.Services.AddSingleton(sp => new TiendaService(sp.GetService<ClientesSqlService>(), sp.GetService<ProveedoresSqlService>()));
 builder.Services.AddSingleton<ExportacionService>();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(opciones =>
 {

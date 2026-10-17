@@ -126,4 +126,72 @@ finally
     using var cmd = new SqlCommand("DELETE FROM Clientes WHERE Documento IN ('99000001', '99000002')", c); cmd.ExecuteNonQuery();
 }
 Verificar(tiendaSql.ConsultarClientes(true).Count == 60, "Pruebas de clientes dejan intacta la carga original.");
+
+// Proveedores: persistencia y compatibilidad con las compras de practica.
+var proveedoresSql = new ProveedoresSqlService(ConexionBD.Instancia);
+var tiendaProveedores = new TiendaService(clientesSql, proveedoresSql);
+Verificar(tiendaProveedores.ConsultarProveedores(true).Count == 12, "Proveedores consulta los 12 registros de SQL sin agregar el ejemplo de memoria.");
+var proveedorOriginal = tiendaProveedores.ConsultarProveedores().First(p => p.Id != 1);
+var proveedorDatos = new ProveedorSolicitud { Ruc = proveedorOriginal.Ruc, RazonSocial = proveedorOriginal.RazonSocial,
+    Contacto = proveedorOriginal.Contacto, Telefono = proveedorOriginal.Telefono, Correo = proveedorOriginal.Correo, Direccion = proveedorOriginal.Direccion };
+string HistorialProveedor()
+{
+    using var c = ConexionBD.Instancia.CrearConexion(); c.Open();
+    using var cmd = new SqlCommand("SELECT (SELECT * FROM Compras WHERE IdProveedor = @id ORDER BY IdCompra FOR JSON PATH), (SELECT d.* FROM DetalleCompras d INNER JOIN Compras c ON c.IdCompra = d.IdCompra WHERE c.IdProveedor = @id ORDER BY d.IdDetalleCompra FOR JSON PATH)", c);
+    cmd.Parameters.AddWithValue("@id", proveedorOriginal.Id);
+    using var lector = cmd.ExecuteReader(); lector.Read();
+    return lector.GetString(0) + lector.GetString(1);
+}
+string historialProveedor = HistorialProveedor();
+try
+{
+    var editado = tiendaProveedores.EditarProveedor(proveedorOriginal.Id, new() { Ruc = proveedorOriginal.Ruc, RazonSocial = "Proveedor SQL editado", Correo = "contacto@example.test" });
+    Verificar(editado.RazonSocial == "Proveedor SQL editado" && new ProveedoresSqlService(ConexionBD.Instancia).ConsultarProveedorActivo(editado.Id).Correo == "contacto@example.test", "Edicion del proveedor guardada en SQL y visible en otra instancia.");
+    var compra = tiendaProveedores.RegistrarCompra(new() { ProveedorId = editado.Id, Items = new() { new() { ProductoId = 1, Cantidad = 1, CostoUnitario = 2 } } });
+    Verificar(compra.ProveedorId == editado.Id && compra.ProveedorNombre == editado.RazonSocial, "Compras reconoce un proveedor SQL cuyo identificador no existe en la lista de practica.");
+    tiendaProveedores.CambiarEstadoProveedor(editado.Id, new() { Activo = false });
+    Verificar(!tiendaProveedores.ConsultarProveedores().Any(p => p.Id == editado.Id) && !tiendaProveedores.ConsultarProveedores(true).Single(p => p.Id == editado.Id).Activo, "Proveedor inactivo solo aparece al incluir inactivos.");
+    Rechazar(() => tiendaProveedores.RegistrarProveedor(proveedorDatos), "RUC del proveedor inactivo sigue reservado.");
+    int stock = tiendaProveedores.BuscarProductos(null).First(p => p.Id == 1).Stock;
+    Rechazar(() => tiendaProveedores.RegistrarCompra(new() { ProveedorId = editado.Id, Items = new() { new() { ProductoId = 1, Cantidad = 1, CostoUnitario = 2 } } }), "Compras vuelve a comprobar el estado actual del proveedor SQL.");
+    Verificar(tiendaProveedores.BuscarProductos(null).First(p => p.Id == 1).Stock == stock && tiendaProveedores.ConsultarCompras().Count == 1, "Una compra de proveedor inactivo no cambia stock ni movimientos de practica.");
+    Verificar(HistorialProveedor() == historialProveedor, "Editar y desactivar un proveedor conserva todas sus compras SQL y sus detalles historicos.");
+    Verificar(Escalar("SELECT COUNT(*) FROM Compras") == 60, "Las compras de practica no escriben movimientos en SQL durante esta etapa.");
+}
+finally
+{
+    tiendaProveedores.EditarProveedor(proveedorOriginal.Id, proveedorDatos);
+    tiendaProveedores.CambiarEstadoProveedor(proveedorOriginal.Id, new() { Activo = proveedorOriginal.Activo });
+}
+ProveedorSolicitud datosNuevoProveedor = new() { Ruc = "20990000001", RazonSocial = "  Distribuidor SQL de prueba  " };
+try
+{
+    var nuevo = tiendaProveedores.RegistrarProveedor(datosNuevoProveedor);
+    Verificar(nuevo.Activo && nuevo.RazonSocial == "Distribuidor SQL de prueba" && nuevo.Contacto == "" && nuevo.Correo == "" && nuevo.Telefono == "" && nuevo.Direccion == "", "Alta de proveedor normaliza datos y admite campos opcionales vacios.");
+    var segundaTienda = new TiendaService(null, new ProveedoresSqlService(ConexionBD.Instancia));
+    Verificar(segundaTienda.ConsultarProveedores().Any(p => p.Id == nuevo.Id), "Proveedor nuevo persiste entre instancias del servicio.");
+    Rechazar(() => tiendaProveedores.EditarProveedor(nuevo.Id, proveedorDatos), "Edicion rechaza un RUC ya registrado.");
+    Rechazar(() => tiendaProveedores.RegistrarProveedor(new() { Ruc = "123", RazonSocial = "Invalido" }), "RUC corto no se guarda.");
+    Rechazar(() => tiendaProveedores.RegistrarProveedor(new() { Ruc = "2099000000A", RazonSocial = "Invalido" }), "RUC con letras no se guarda.");
+    Rechazar(() => tiendaProveedores.RegistrarProveedor(new() { Ruc = "20990000003", RazonSocial = " " }), "Razon social vacia no se guarda.");
+    Rechazar(() => tiendaProveedores.RegistrarProveedor(new() { Ruc = "20990000003", RazonSocial = new string('x', 101) }), "Razon social demasiado larga no se guarda.");
+    Rechazar(() => tiendaProveedores.RegistrarProveedor(new() { Ruc = "20990000003", RazonSocial = "Invalido", Correo = "sin-arroba" }), "Correo invalido no se guarda.");
+    Rechazar(() => tiendaProveedores.EditarProveedor(int.MaxValue, datosNuevoProveedor), "Editar proveedor inexistente devuelve un error controlado.");
+    Rechazar(() => tiendaProveedores.CambiarEstadoProveedor(int.MaxValue, new() { Activo = true }), "Estado de proveedor inexistente devuelve un error controlado.");
+    Rechazar(() => tiendaProveedores.CambiarEstadoProveedor(nuevo.Id, new()), "El estado del proveedor es obligatorio.");
+    var actualizado = tiendaProveedores.EditarProveedor(nuevo.Id, new() { Ruc = "20990000004", RazonSocial = "Distribuidor O'Connor", Contacto = "  Contacto  ", Telefono = "999000111", Correo = "correo@example.test", Direccion = "Av. de prueba 100" });
+    Verificar(actualizado.Ruc == "20990000004" && actualizado.RazonSocial == "Distribuidor O'Connor" && actualizado.Contacto == "Contacto" && actualizado.Direccion == "Av. de prueba 100", "Editar conserva todos los campos y trata apostrofos como datos.");
+    var simultaneos = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
+    {
+        try { new ProveedoresSqlService(ConexionBD.Instancia).RegistrarProveedor(new() { Ruc = "20990000002", RazonSocial = "Concurrente" }); return true; }
+        catch (ArgumentException) { return false; }
+    })));
+    Verificar(simultaneos.Count(x => x) == 1, "RUC unico ante altas simultaneas.");
+}
+finally
+{
+    using var c = ConexionBD.Instancia.CrearConexion(); c.Open();
+    using var cmd = new SqlCommand("DELETE FROM Proveedores WHERE Ruc IN ('20990000001', '20990000002', '20990000004')", c); cmd.ExecuteNonQuery();
+}
+Verificar(tiendaProveedores.ConsultarProveedores(true).Count == 12, "Pruebas de proveedores dejan intacta la carga original.");
 Console.WriteLine($"{comprobaciones} comprobaciones SQL correctas.");
