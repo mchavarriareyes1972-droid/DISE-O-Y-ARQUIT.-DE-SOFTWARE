@@ -53,7 +53,7 @@ const fs = require('node:fs');
         await page.goto(base + '/Home/Clientes');
         const cliente = page.locator('#tablaClientes tr').filter({ hasText: fiado.clienteNombre });
         await cliente.waitFor(); assert((await cliente.innerText()).replace(/\s/g, '').includes(new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(await saldo(clienteId)).replace(/\s/g, '')));
-        assert(await page.locator('#formPago fieldset').isDisabled());
+        assert(await page.locator('#formPago button[type=submit]').isDisabled());
         await page.goto(base + '/Home/Reportes'); await texto('reporteCantidad', '937');
         const ultima = page.locator('#tablaVentas tr').first();
         await ultima.getByRole('button', { name: 'Ver detalle', exact: true }).click();
@@ -63,7 +63,7 @@ const fs = require('node:fs');
         await page.locator('#cerrarDetalle').click(); await page.reload(); await texto('reporteCantidad', '937');
         assert((await page.locator('#tablaVentas tr').first().innerText()).includes(fiado.clienteNombre));
         fs.mkdirSync('/tmp/giovanna-qa', { recursive: true });
-        await page.screenshot({ path: '/tmp/giovanna-qa/ventas-sql.png', fullPage: true });
+        await page.screenshot({ path: '/tmp/giovanna-qa/ventas-sql.png', fullPage: false });
         assert.deepEqual(errores, []);
         console.log('OK: ventas SQL en Chromium: cajero, efectivo multiple, digital, fiado, agotamiento, deuda, historial, detalle y recarga.');
     } finally { await browser.close(); }
