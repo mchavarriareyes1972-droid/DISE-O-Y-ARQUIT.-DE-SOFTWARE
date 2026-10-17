@@ -27,7 +27,7 @@ const fs = require('node:fs');
         await page.goto(base + '/Home/Ventas');
         await page.locator('#clienteFiado option').first().waitFor({ state: 'attached' });
         assert(await page.locator('#formVenta button[type=submit]').isEnabled());
-        assert(await page.locator('#formaPago option[value=Fiado]').isEnabled());
+        assert(await page.locator('#formaPago option').filter({ hasText: /^Fiado$/ }).isEnabled());
         // Efectivo multiple: 7.25 + 6.50 = 13.75, vuelto 6.25.
         await agregar('QA_UI_01'); await agregar('QA_UI_02');
         await page.locator('#montoRecibido').fill('20');
