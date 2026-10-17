@@ -120,7 +120,7 @@ if '--verificar-reinicio' in sys.argv:
     api(f"proveedores/{proveedor['id']}/estado", {'activo': True})
     verificar(any(p['id'] == proveedor['id'] for p in api('proveedores')), 'Reactivacion del proveedor persistida.')
     api('compras', {'proveedorId': proveedor['id'], 'items': [{'productoId': 1, 'cantidad': 1, 'costoUnitario': 2}]}, esperado=400)
-    pagina_compras = admin.open(base + '/Home/Compras').read().decode()
+    pagina_compras = html.unescape(admin.open(base + '/Home/Compras').read().decode())
     verificar('El registro de ventas y compras estará disponible' in pagina_compras, 'Compras informa que el registro esta pendiente y protege las existencias SQL.')
 else:
     proveedores = api('proveedores?incluirInactivos=true')
