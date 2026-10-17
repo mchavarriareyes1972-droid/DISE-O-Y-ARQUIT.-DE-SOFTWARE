@@ -3,15 +3,18 @@ using Tienda_Giovanna.Models;
 
 namespace Tienda_Giovanna.Services;
 
-// Clientes y proveedores pueden usar SQL; los movimientos conservan su almacenamiento de practica.
+// Catalogos conectados por etapas; los movimientos se migran con sus transacciones.
 public partial class TiendaService
 {
     private readonly object bloqueo = new();
     private readonly Func<DateTimeOffset> reloj;
     private readonly ClientesSqlService? clientesSql;
     private readonly ProveedoresSqlService? proveedoresSql;
+    private readonly ProductosSqlService? productosSql;
     public bool ClientesEnSql => clientesSql != null;
     public bool ProveedoresEnSql => proveedoresSql != null;
+    public bool ProductosEnSql => productosSql != null;
+    public const string StockPendiente = "El registro de ventas y compras estará disponible al completar su conexión a la base de datos. Puedes consultar los productos, existencias y alternativas.";
     public const string MovimientosPendientes = "El registro de nuevos fiados y abonos estará disponible al completar la conexión de ventas y pagos. Puedes consultar los saldos y pagos existentes.";
     private readonly List<Producto> productos = new()
     {
@@ -34,10 +37,11 @@ public partial class TiendaService
 
     public TiendaService() : this(() => DateTimeOffset.UtcNow) { }
     public TiendaService(Func<DateTimeOffset> reloj) { this.reloj = reloj; }
-    public TiendaService(ClientesSqlService? clientesSql, ProveedoresSqlService? proveedoresSql = null) : this()
+    public TiendaService(ClientesSqlService? clientesSql, ProveedoresSqlService? proveedoresSql = null, ProductosSqlService? productosSql = null) : this()
     {
         this.clientesSql = clientesSql;
         this.proveedoresSql = proveedoresSql;
+        this.productosSql = productosSql;
     }
     private static T Copia<T>(T valor) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(valor))!;
     private static decimal Moneda(decimal valor) => decimal.Round(valor, 2, MidpointRounding.AwayFromZero);
@@ -52,21 +56,15 @@ public partial class TiendaService
 
     private (string Codigo, string Nombre, decimal Precio) ValidarProducto(ProductoSolicitud solicitud, int? id = null)
     {
-        string codigo = (solicitud.Codigo ?? "").Trim().ToUpperInvariant();
-        string nombre = (solicitud.Nombre ?? "").Trim();
-        if (codigo.Length == 0 || codigo.Length > 20) throw new ArgumentException("El código debe tener entre 1 y 20 caracteres.");
-        if (nombre.Length == 0 || nombre.Length > 100) throw new ArgumentException("El nombre debe tener entre 1 y 100 caracteres.");
-        if (productos.Any(p => p.Id != id && p.Codigo.Equals(codigo, StringComparison.OrdinalIgnoreCase)))
+        Producto datos = ProductosValidacion.Validar(solicitud);
+        if (productos.Any(p => p.Id != id && p.Codigo.Equals(datos.Codigo, StringComparison.OrdinalIgnoreCase)))
             throw new ArgumentException("Ya existe un producto con ese código, incluso si está inactivo.");
-        if (solicitud.Precio <= 0) throw new ArgumentException("El precio debe ser mayor que cero.");
-        decimal precio = Moneda(solicitud.Precio);
-        if (precio <= 0) throw new ArgumentException("El precio mínimo es S/ 0.01.");
-        if (solicitud.StockMinimo < 0) throw new ArgumentException("El stock mínimo no puede ser negativo.");
-        return (codigo, nombre, precio);
+        return (datos.Codigo, datos.Nombre, datos.Precio);
     }
 
     public Producto RegistrarProducto(RegistroProductoSolicitud solicitud)
     {
+        if (productosSql != null) return productosSql.RegistrarProducto(solicitud);
         lock (bloqueo)
         {
             var datos = ValidarProducto(solicitud);
@@ -80,6 +78,7 @@ public partial class TiendaService
 
     public Producto EditarProducto(int id, ProductoSolicitud solicitud)
     {
+        if (productosSql != null) return productosSql.EditarProducto(id, solicitud);
         lock (bloqueo)
         {
             Producto producto = ObtenerProducto(id);
@@ -93,6 +92,7 @@ public partial class TiendaService
 
     public Producto CambiarEstadoProducto(int id, EstadoProductoSolicitud solicitud)
     {
+        if (productosSql != null) return productosSql.CambiarEstadoProducto(id, solicitud);
         lock (bloqueo)
         {
             Producto producto = ObtenerProducto(id);
@@ -103,6 +103,7 @@ public partial class TiendaService
 
     public List<Producto> BuscarProductos(string? busqueda, bool incluirInactivos = false)
     {
+        if (productosSql != null) return productosSql.BuscarProductos(busqueda, incluirInactivos);
         lock (bloqueo)
         {
             string texto = (busqueda ?? "").Trim();
@@ -114,6 +115,7 @@ public partial class TiendaService
 
     public object ConsultarProducto(int id)
     {
+        if (productosSql != null) return productosSql.ConsultarProducto(id);
         lock (bloqueo)
         {
             Producto producto = ObtenerProducto(id);
@@ -136,6 +138,7 @@ public partial class TiendaService
 
     public Venta RegistrarVenta(VentaSolicitud solicitud)
     {
+        if (ProductosEnSql) throw new ArgumentException(StockPendiente);
         if (ClientesEnSql && solicitud.FormaPago == "Fiado") throw new ArgumentException(MovimientosPendientes);
         lock (bloqueo)
         {
@@ -198,6 +201,7 @@ public partial class TiendaService
 
     public Compra RegistrarCompra(CompraSolicitud solicitud)
     {
+        if (ProductosEnSql) throw new ArgumentException(StockPendiente);
         lock (bloqueo)
         {
             Proveedor proveedor = proveedoresSql != null ? proveedoresSql.ConsultarProveedorActivo(solicitud.ProveedorId)
@@ -228,6 +232,7 @@ public partial class TiendaService
 
     public Producto ActualizarStockMinimo(StockMinimoSolicitud solicitud)
     {
+        if (productosSql != null) return productosSql.ActualizarStockMinimo(solicitud);
         lock (bloqueo)
         {
             if (solicitud.StockMinimo < 0) throw new ArgumentException("El stock mínimo no puede ser negativo.");
@@ -239,6 +244,7 @@ public partial class TiendaService
 
     public Producto RegistrarAlternativas(AlternativasSolicitud solicitud)
     {
+        if (productosSql != null) return productosSql.RegistrarAlternativas(solicitud);
         lock (bloqueo)
         {
             Producto producto = ObtenerProductoActivo(solicitud.ProductoId);
@@ -282,7 +288,7 @@ public partial class TiendaService
                 TotalFiado = filtradas.Where(v => v.FormaPago == "Fiado").Sum(v => v.Total),
                 CobradoEnVentas = filtradas.Where(v => v.FormaPago != "Fiado").Sum(v => v.Total),
                 Abonos = pagos.Where(p => EnPeriodo(p.Fecha, desde, hasta)).Sum(p => p.Monto),
-                ProductosStockBajo = productos.Count(p => p.Activo && p.StockBajo), Ventas = Copia(filtradas.OrderByDescending(v => v.Id).ToList()),
+                ProductosStockBajo = productosSql?.ContarStockBajo() ?? productos.Count(p => p.Activo && p.StockBajo), Ventas = Copia(filtradas.OrderByDescending(v => v.Id).ToList()),
                 Pagos = Copia(pagos.Where(p => EnPeriodo(p.Fecha, desde, hasta)).OrderByDescending(p => p.Id).ToList()) };
         }
     }

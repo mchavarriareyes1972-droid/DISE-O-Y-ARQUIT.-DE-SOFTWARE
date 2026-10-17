@@ -1,6 +1,10 @@
 @inject Tienda_Giovanna.Services.TiendaService Tienda
 @{ ViewData["Title"] = "Ventas"; }
 <div class="page-heading"><div><p class="eyebrow">PUNTO DE VENTA</p><h1>Registrar venta</h1><p>Busca por nombre o código y selecciona la forma de pago.</p></div></div>
+@if (Tienda.ProductosEnSql)
+{
+    <p class="notice" role="status">@Tienda_Giovanna.Services.TiendaService.StockPendiente</p>
+}
 <div class="two-columns">
     <section class="card">
         <h2>Productos</h2>
@@ -30,7 +34,7 @@
                 <small>Verifica la recepción del pago antes de finalizar.</small>
             </div>
             <div id="campoFiado" hidden><label for="clienteFiado">Cliente</label><select id="clienteFiado"></select></div>
-            <button class="primary full" type="submit">Finalizar venta</button>
+            <button class="primary full" type="submit" disabled="@Tienda.ProductosEnSql" data-bloqueado="@Tienda.ProductosEnSql.ToString().ToLowerInvariant()">Finalizar venta</button>
         </form>
         <p class="message" id="mensajeVenta" role="status"></p>
     </section>

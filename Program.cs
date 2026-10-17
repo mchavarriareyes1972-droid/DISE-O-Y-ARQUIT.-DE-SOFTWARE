@@ -11,9 +11,11 @@ builder.Services.AddControllersWithViews();
 string persistenciaUsuarios = builder.Configuration["Persistencia:Usuarios"] ?? "SqlServer";
 string persistenciaClientes = builder.Configuration["Persistencia:Clientes"] ?? "SqlServer";
 string persistenciaProveedores = builder.Configuration["Persistencia:Proveedores"] ?? "SqlServer";
-if (new[] { persistenciaUsuarios, persistenciaClientes, persistenciaProveedores }.Any(modo => modo is not ("SqlServer" or "Memoria")))
-    throw new InvalidOperationException("Persistencia:Usuarios, Clientes y Proveedores deben ser SqlServer o Memoria.");
-if (new[] { persistenciaUsuarios, persistenciaClientes, persistenciaProveedores }.Contains("SqlServer"))
+string persistenciaProductos = builder.Configuration["Persistencia:Productos"] ?? "SqlServer";
+var modos = new[] { persistenciaUsuarios, persistenciaClientes, persistenciaProveedores, persistenciaProductos };
+if (modos.Any(modo => modo is not ("SqlServer" or "Memoria")))
+    throw new InvalidOperationException("Persistencia:Usuarios, Clientes, Proveedores y Productos deben ser SqlServer o Memoria.");
+if (modos.Contains("SqlServer"))
 {
     ConexionBD.Instancia.Configurar(builder.Configuration.GetConnectionString("BodegaGiovanna") ?? "");
     builder.Services.AddSingleton(ConexionBD.Instancia);
@@ -26,7 +28,9 @@ if (persistenciaClientes == "SqlServer")
     builder.Services.AddSingleton<ClientesSqlService>();
 if (persistenciaProveedores == "SqlServer")
     builder.Services.AddSingleton<ProveedoresSqlService>();
-builder.Services.AddSingleton(sp => new TiendaService(sp.GetService<ClientesSqlService>(), sp.GetService<ProveedoresSqlService>()));
+if (persistenciaProductos == "SqlServer")
+    builder.Services.AddSingleton<ProductosSqlService>();
+builder.Services.AddSingleton(sp => new TiendaService(sp.GetService<ClientesSqlService>(), sp.GetService<ProveedoresSqlService>(), sp.GetService<ProductosSqlService>()));
 builder.Services.AddSingleton<ExportacionService>();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(opciones =>
 {

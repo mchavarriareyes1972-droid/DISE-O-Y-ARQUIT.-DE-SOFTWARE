@@ -194,4 +194,94 @@ finally
     using var cmd = new SqlCommand("DELETE FROM Proveedores WHERE Ruc IN ('20990000001', '20990000002', '20990000004')", c); cmd.ExecuteNonQuery();
 }
 Verificar(tiendaProveedores.ConsultarProveedores(true).Count == 12, "Pruebas de proveedores dejan intacta la carga original.");
+
+// Productos y alternativas: no modificar movimientos ni existencias al editar el catalogo.
+var productosSql = new ProductosSqlService(ConexionBD.Instancia);
+var tiendaCatalogo = new TiendaService(clientesSql, proveedoresSql, productosSql);
+var catalogoSql = tiendaCatalogo.BuscarProductos(null, true);
+Verificar(catalogoSql.Count == 120 && catalogoSql.Sum(p => p.AlternativosIds.Count) == 56, "Catalogo SQL de 120 productos y 56 relaciones, sin agregar ejemplos en memoria.");
+Verificar(tiendaCatalogo.BuscarProductos(" p001 ").Single().Nombre == "Arroz extra bolsa 1 kg" && tiendaCatalogo.BuscarProductos("ARROZ EXTRA").Single().Id == 1, "Buscar codigo y nombre sin distinguir mayusculas.");
+Verificar(productosSql.ContarStockBajo() == 7 && tiendaCatalogo.Reporte(null, null).ProductosStockBajo == 7, "Alertas calculadas con la vista SQL de stock bajo.");
+Verificar(catalogoSql.Count(p => p.Activo && p.StockBajo) == 7, "Las alertas de la lista coinciden con la vista SQL.");
+Verificar(JsonSerializer.SerializeToElement(tiendaCatalogo.ConsultarProducto(120)).GetProperty("Producto").GetProperty("Codigo").GetString() == "P120", "La ficha reconoce productos que no existian en memoria.");
+var productoOriginal = catalogoSql.First(p => p.Activo && p.StockBajo);
+ProductoSolicitud datosProductoOriginal = new() { Codigo = productoOriginal.Codigo, Nombre = productoOriginal.Nombre, Precio = productoOriginal.Precio, StockMinimo = productoOriginal.StockMinimo };
+string HistorialProducto()
+{
+    using var c = ConexionBD.Instancia.CrearConexion(); c.Open();
+    using var cmd = new SqlCommand("SELECT (SELECT * FROM DetalleVentas WHERE IdProducto = @id ORDER BY IdDetalleVenta FOR JSON PATH), (SELECT * FROM DetalleCompras WHERE IdProducto = @id ORDER BY IdDetalleCompra FOR JSON PATH), (SELECT Categoria, FechaVencimiento FROM Productos WHERE IdProducto = @id FOR JSON PATH)", c);
+    cmd.Parameters.AddWithValue("@id", productoOriginal.Id);
+    using var lector = cmd.ExecuteReader(); lector.Read();
+    return lector.GetString(0) + lector.GetString(1) + lector.GetString(2);
+}
+string historialProducto = HistorialProducto();
+try
+{
+    var editado = tiendaCatalogo.EditarProducto(productoOriginal.Id, new() { Codigo = productoOriginal.Codigo, Nombre = "Producto editado SQL", Precio = 12.345m, StockMinimo = 0 });
+    Verificar(editado.Stock == productoOriginal.Stock && editado.Precio == 12.35m, "Edicion conserva existencias y redondea precio a dos decimales.");
+    Verificar(HistorialProducto() == historialProducto && editado.AlternativosIds.SequenceEqual(productoOriginal.AlternativosIds), "Editar no altera ventas, compras, categoria, vencimiento ni relaciones existentes.");
+    tiendaCatalogo.CambiarEstadoProducto(productoOriginal.Id, new() { Activo = false });
+    Verificar(!tiendaCatalogo.BuscarProductos(productoOriginal.Codigo).Any() && !tiendaCatalogo.BuscarProductos(productoOriginal.Codigo, true).Single().Activo, "Inactivos excluidos de busqueda normal y conservados en administracion.");
+    Rechazar(() => tiendaCatalogo.RegistrarProducto(new() { Codigo = productoOriginal.Codigo.ToLowerInvariant(), Nombre = "Duplicado", Precio = 1 }), "Codigo de producto inactivo sigue reservado sin distinguir mayusculas.");
+    Verificar(productosSql.ContarStockBajo() == 6, "Las alertas excluyen un producto desactivado.");
+}
+finally
+{
+    tiendaCatalogo.EditarProducto(productoOriginal.Id, datosProductoOriginal);
+    tiendaCatalogo.CambiarEstadoProducto(productoOriginal.Id, new() { Activo = productoOriginal.Activo });
+}
+Producto Ficha(int id) => JsonSerializer.SerializeToElement(tiendaCatalogo.ConsultarProducto(id)).GetProperty("Producto").Deserialize<Producto>()!;
+int Disponibles(int id) => JsonSerializer.SerializeToElement(tiendaCatalogo.ConsultarProducto(id)).GetProperty("Alternativas").GetArrayLength();
+try
+{
+    var originalNuevo = tiendaCatalogo.RegistrarProducto(new() { Codigo = " qa_sql_01 ", Nombre = " Aceite 100% [SQL] ~ lote_ ", Precio = 1.235m, StockInicial = 0, StockMinimo = 5 });
+    var sustituto = tiendaCatalogo.RegistrarProducto(new() { Codigo = "QA_SQL_02", Nombre = "Sustituto SQL con stock", Precio = 2, StockInicial = 10, StockMinimo = 0 });
+    var agotado = tiendaCatalogo.RegistrarProducto(new() { Codigo = "QA_SQL_03", Nombre = "Sustituto SQL agotado", Precio = 2, StockInicial = 0, StockMinimo = 0 });
+    Verificar(originalNuevo.Codigo == "QA_SQL_01" && originalNuevo.Nombre == "Aceite 100% [SQL] ~ lote_" && originalNuevo.Precio == 1.24m, "Alta normaliza texto y precio, y guarda el stock inicial.");
+    Verificar(tiendaCatalogo.BuscarProductos("100% [SQL] ~ lote_").Single().Id == originalNuevo.Id && !tiendaCatalogo.BuscarProductos(new string('a', 101)).Any(), "Busqueda literal segura de comodines y textos largos.");
+    var segundaTienda = new TiendaService(null, null, new ProductosSqlService(ConexionBD.Instancia));
+    Verificar(segundaTienda.BuscarProductos("QA_SQL_02").Single().Stock == 10, "Un servicio nuevo recupera productos y existencias desde SQL.");
+    Rechazar(() => tiendaCatalogo.EditarProducto(originalNuevo.Id, datosProductoOriginal), "No editar a un codigo existente.");
+    Rechazar(() => tiendaCatalogo.RegistrarProducto(new() { Codigo = "QA_ERROR", Nombre = " ", Precio = 1 }), "Nombre vacio rechazado.");
+    Rechazar(() => tiendaCatalogo.RegistrarProducto(new() { Codigo = "QA_ERROR", Nombre = "Error", Precio = .001m }), "Precio que redondea a cero rechazado.");
+    Rechazar(() => tiendaCatalogo.RegistrarProducto(new() { Codigo = "QA_ERROR", Nombre = "Error", Precio = 10000000000000000m }), "Importe fuera de DECIMAL(18,2) rechazado antes de enviar SQL.");
+    Rechazar(() => tiendaCatalogo.RegistrarProducto(new() { Codigo = "QA_ERROR", Nombre = "Error", Precio = 1, StockInicial = -1 }), "Stock inicial negativo rechazado.");
+    Rechazar(() => tiendaCatalogo.EditarProducto(int.MaxValue, datosProductoOriginal), "Editar producto inexistente devuelve error controlado.");
+    Rechazar(() => tiendaCatalogo.CambiarEstadoProducto(originalNuevo.Id, new()), "Estado de producto obligatorio.");
+    Rechazar(() => tiendaCatalogo.ActualizarStockMinimo(new() { ProductoId = originalNuevo.Id, StockMinimo = -1 }), "Stock minimo negativo rechazado.");
+    Verificar(tiendaCatalogo.ActualizarStockMinimo(new() { ProductoId = sustituto.Id, StockMinimo = 10 }).StockBajo, "El minimo configurable actualiza la alerta real.");
+    var relaciones = tiendaCatalogo.RegistrarAlternativas(new() { ProductoId = originalNuevo.Id, AlternativosIds = new() { sustituto.Id, sustituto.Id, agotado.Id } });
+    Verificar(relaciones.AlternativosIds.Count == 2 && Disponibles(originalNuevo.Id) == 1, "Alternativas sin duplicados; solo sugerir productos con stock.");
+    var antes = Ficha(originalNuevo.Id).AlternativosIds;
+    Rechazar(() => tiendaCatalogo.RegistrarAlternativas(new() { ProductoId = originalNuevo.Id, AlternativosIds = new() { sustituto.Id, int.MaxValue } }), "Alternativa inexistente no reemplaza las relaciones previas.");
+    Rechazar(() => tiendaCatalogo.RegistrarAlternativas(new() { ProductoId = originalNuevo.Id, AlternativosIds = new() { originalNuevo.Id } }), "Producto no puede ser su propia alternativa.");
+    Verificar(Ficha(originalNuevo.Id).AlternativosIds.SequenceEqual(antes), "Validacion fallida conserva todas las alternativas anteriores.");
+    tiendaCatalogo.CambiarEstadoProducto(sustituto.Id, new() { Activo = false });
+    Verificar(Disponibles(originalNuevo.Id) == 0 && Ficha(originalNuevo.Id).AlternativosIds.Count == 2, "Desactivar sustituto lo oculta sin borrar la relacion.");
+    Rechazar(() => tiendaCatalogo.RegistrarAlternativas(new() { ProductoId = originalNuevo.Id, AlternativosIds = new() { sustituto.Id } }), "No registrar sustitutos inactivos.");
+    tiendaCatalogo.CambiarEstadoProducto(sustituto.Id, new() { Activo = true });
+    tiendaCatalogo.CambiarEstadoProducto(originalNuevo.Id, new() { Activo = false });
+    Verificar(Disponibles(originalNuevo.Id) == 0, "Producto original inactivo no ofrece alternativas.");
+    tiendaCatalogo.CambiarEstadoProducto(originalNuevo.Id, new() { Activo = true });
+    await Task.WhenAll(new[] { sustituto.Id, agotado.Id }.Select(id => Task.Run(() => productosSql.RegistrarAlternativas(new() { ProductoId = originalNuevo.Id, AlternativosIds = new() { id } }))));
+    Verificar(Ficha(originalNuevo.Id).AlternativosIds.Count == 1, "Reemplazos simultaneos de alternativas quedan completos y no se mezclan.");
+    tiendaCatalogo.RegistrarAlternativas(new() { ProductoId = originalNuevo.Id, AlternativosIds = new() });
+    Verificar(Ficha(originalNuevo.Id).AlternativosIds.Count == 0, "Se pueden quitar todas las alternativas.");
+    var altas = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
+    {
+        try { productosSql.RegistrarProducto(new() { Codigo = "qa_sql_dupe", Nombre = "Concurrente", Precio = 1 }); return true; }
+        catch (ArgumentException) { return false; }
+    })));
+    Verificar(altas.Count(x => x) == 1, "Codigo unico ante altas simultaneas.");
+    string stockAntes = JsonSerializer.Serialize(tiendaCatalogo.BuscarProductos(null, true).Select(p => new { p.Id, p.Stock }));
+    Rechazar(() => tiendaCatalogo.RegistrarVenta(new() { FormaPago = "Efectivo", MontoRecibido = 100, Items = new() { new() { ProductoId = sustituto.Id, Cantidad = 1 } } }), "No vender stock SQL hasta migrar el registro de ventas.");
+    Rechazar(() => tiendaCatalogo.RegistrarCompra(new() { ProveedorId = 1, Items = new() { new() { ProductoId = sustituto.Id, Cantidad = 1, CostoUnitario = 1 } } }), "No reponer stock SQL hasta migrar el registro de compras.");
+    Verificar(stockAntes == JsonSerializer.Serialize(tiendaCatalogo.BuscarProductos(null, true).Select(p => new { p.Id, p.Stock })) && Escalar("SELECT COUNT(*) FROM Ventas") == 931 && Escalar("SELECT COUNT(*) FROM Compras") == 60, "Operaciones pendientes conservan stock y movimientos SQL.");
+}
+finally
+{
+    using var c = ConexionBD.Instancia.CrearConexion(); c.Open();
+    using var cmd = new SqlCommand("DELETE FROM ProductosAlternativos WHERE IdProducto IN (SELECT IdProducto FROM Productos WHERE Codigo IN ('QA_SQL_01','QA_SQL_02','QA_SQL_03','QA_SQL_DUPE')) OR IdAlternativo IN (SELECT IdProducto FROM Productos WHERE Codigo IN ('QA_SQL_01','QA_SQL_02','QA_SQL_03','QA_SQL_DUPE')); DELETE FROM Productos WHERE Codigo IN ('QA_SQL_01','QA_SQL_02','QA_SQL_03','QA_SQL_DUPE')", c); cmd.ExecuteNonQuery();
+}
+Verificar(tiendaCatalogo.BuscarProductos(null, true).Count == 120 && Escalar("SELECT COUNT(*) FROM ProductosAlternativos") == 56 && productosSql.ContarStockBajo() == 7, "Pruebas de productos dejan intactos el catalogo, las alternativas y las alertas originales.");
 Console.WriteLine($"{comprobaciones} comprobaciones SQL correctas.");

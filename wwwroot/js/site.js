@@ -191,6 +191,7 @@ async function iniciarVentas() {
 }
 
 function renderInventario(productos) {
+    $('cantidadProductos').textContent = `Productos mostrados: ${productos.length} · Con stock bajo: ${productos.filter(p => p.activo && p.stockBajo).length}`;
     tabla('tablaInventario', productos, 7, p => {
         const acciones = elemento('div', '', 'button-row');
         acciones.append(boton('Ficha', () => fichaProducto(p.id)));
