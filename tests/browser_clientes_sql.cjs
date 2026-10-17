@@ -62,7 +62,7 @@ const fs = require('node:fs');
         await esperarTexto('mensajeClienteFormulario', 'Ya existe un cliente');
         await page.locator('#cancelarCliente').click();
         await page.goto(base + '/Home/Ventas');
-        assert(await page.locator('#formaPago option').filter({ hasText: /^Fiado$/ }).isDisabled());
+        assert(await page.locator('#formaPago option').filter({ hasText: /^Fiado$/ }).isEnabled());
 
         const caja = await browser.newPage();
         caja.on('pageerror', error => errores.push(error.message));
