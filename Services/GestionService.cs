@@ -96,6 +96,7 @@ public partial class TiendaService
     }
     public Compra ConsultarCompra(int id)
     {
+        if (comprasSql != null) return comprasSql.ConsultarCompra(id);
         lock (bloqueo) { return Copia(compras.FirstOrDefault(c => c.Id == id) ?? throw new ArgumentException("La compra no existe.")); }
     }
 }

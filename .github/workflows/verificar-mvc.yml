@@ -12,6 +12,7 @@ jobs:
       Persistencia__Clientes: Memoria
       Persistencia__Proveedores: Memoria
       Persistencia__Productos: Memoria
+      Persistencia__Compras: Memoria
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

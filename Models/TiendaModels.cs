@@ -85,6 +85,8 @@ public class Compra
     public DateTimeOffset Fecha { get; set; }
     public int ProveedorId { get; set; }
     public string ProveedorNombre { get; set; } = "";
+    public int? UsuarioId { get; set; }
+    public string? UsuarioNombre { get; set; }
     public List<DetalleCompra> Detalles { get; set; } = new();
     public decimal Total { get; set; }
 }

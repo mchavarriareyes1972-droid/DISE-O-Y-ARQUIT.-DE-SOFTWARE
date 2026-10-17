@@ -11,10 +11,13 @@ public partial class TiendaService
     private readonly ClientesSqlService? clientesSql;
     private readonly ProveedoresSqlService? proveedoresSql;
     private readonly ProductosSqlService? productosSql;
+    private readonly ComprasSqlService? comprasSql;
     public bool ClientesEnSql => clientesSql != null;
     public bool ProveedoresEnSql => proveedoresSql != null;
     public bool ProductosEnSql => productosSql != null;
-    public const string StockPendiente = "El registro de ventas y compras estará disponible al completar su conexión a la base de datos. Puedes consultar los productos, existencias y alternativas.";
+    public bool ComprasEnSql => comprasSql != null;
+    public bool ComprasPendientes => ProductosEnSql && !ComprasEnSql;
+    public const string StockPendiente = "El registro de nuevas ventas estará disponible al completar su conexión a la base de datos. Puedes consultar los productos, existencias y alternativas.";
     public const string MovimientosPendientes = "El registro de nuevos fiados y abonos estará disponible al completar la conexión de ventas y pagos. Puedes consultar los saldos y pagos existentes.";
     private readonly List<Producto> productos = new()
     {
@@ -37,11 +40,12 @@ public partial class TiendaService
 
     public TiendaService() : this(() => DateTimeOffset.UtcNow) { }
     public TiendaService(Func<DateTimeOffset> reloj) { this.reloj = reloj; }
-    public TiendaService(ClientesSqlService? clientesSql, ProveedoresSqlService? proveedoresSql = null, ProductosSqlService? productosSql = null) : this()
+    public TiendaService(ClientesSqlService? clientesSql, ProveedoresSqlService? proveedoresSql = null, ProductosSqlService? productosSql = null, ComprasSqlService? comprasSql = null) : this()
     {
         this.clientesSql = clientesSql;
         this.proveedoresSql = proveedoresSql;
         this.productosSql = productosSql;
+        this.comprasSql = comprasSql;
     }
     private static T Copia<T>(T valor) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(valor))!;
     private static decimal Moneda(decimal valor) => decimal.Round(valor, 2, MidpointRounding.AwayFromZero);
@@ -134,7 +138,11 @@ public partial class TiendaService
         if (clientesSql != null) return clientesSql.ConsultarPagos(clienteId);
         lock (bloqueo) { return Copia(pagos.Where(p => !clienteId.HasValue || p.ClienteId == clienteId).OrderByDescending(p => p.Id).ToList()); }
     }
-    public List<Compra> ConsultarCompras() { lock (bloqueo) { return Copia(compras.OrderByDescending(c => c.Id).ToList()); } }
+    public List<Compra> ConsultarCompras()
+    {
+        if (comprasSql != null) return comprasSql.ConsultarCompras();
+        lock (bloqueo) { return Copia(compras.OrderByDescending(c => c.Id).ToList()); }
+    }
 
     public Venta RegistrarVenta(VentaSolicitud solicitud)
     {
@@ -199,20 +207,18 @@ public partial class TiendaService
         }
     }
 
-    public Compra RegistrarCompra(CompraSolicitud solicitud)
+    public Compra RegistrarCompra(CompraSolicitud solicitud, int? usuarioId = null)
     {
-        if (ProductosEnSql) throw new ArgumentException(StockPendiente);
+        if (comprasSql != null) return comprasSql.RegistrarCompra(solicitud, usuarioId ?? 0);
+        if (ProductosEnSql) throw new ArgumentException("El registro de compras está pendiente de conexión a la base de datos.");
         lock (bloqueo)
         {
+            var items = ComprasValidacion.Validar(solicitud);
             Proveedor proveedor = proveedoresSql != null ? proveedoresSql.ConsultarProveedorActivo(solicitud.ProveedorId)
                 : proveedores.FirstOrDefault(p => p.Id == solicitud.ProveedorId && p.Activo)
                 ?? throw new ArgumentException("Selecciona un proveedor activo registrado.");
-            if (solicitud.Items == null || solicitud.Items.Count == 0 || solicitud.Items.Any(i => i == null || i.Cantidad <= 0 || i.CostoUnitario <= 0))
-                throw new ArgumentException("Agrega productos con cantidades y costos mayores que cero.");
-            if (solicitud.Items.Select(i => i.ProductoId).Distinct().Count() != solicitud.Items.Count)
-                throw new ArgumentException("Cada producto debe aparecer una sola vez en la compra. Edita su cantidad en el detalle.");
             var detalles = new List<DetalleCompra>();
-            foreach (var linea in solicitud.Items)
+            foreach (var linea in items)
             {
                 Producto producto = ObtenerProductoActivo(linea.ProductoId);
                 if ((long)producto.Stock + linea.Cantidad > int.MaxValue) throw new ArgumentException("La cantidad excede el límite del inventario.");
@@ -223,7 +229,7 @@ public partial class TiendaService
             }
             // La compra completa se valida antes de reponer cualquier producto.
             Compra compra = new() { Id = compras.Count + 1, Fecha = reloj(), ProveedorId = proveedor.Id,
-                ProveedorNombre = proveedor.RazonSocial, Detalles = detalles, Total = detalles.Sum(d => d.Subtotal) };
+                ProveedorNombre = proveedor.RazonSocial, UsuarioId = usuarioId, Detalles = detalles, Total = detalles.Sum(d => d.Subtotal) };
             foreach (var detalle in detalles) ObtenerProducto(detalle.ProductoId).Stock += detalle.Cantidad;
             compras.Add(compra);
             return Copia(compra);

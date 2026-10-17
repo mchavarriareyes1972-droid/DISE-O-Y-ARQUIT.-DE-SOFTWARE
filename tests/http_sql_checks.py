@@ -119,9 +119,9 @@ if '--verificar-reinicio' in sys.argv:
     verificar(not any(p['id'] == proveedor['id'] for p in api('proveedores')), 'Proveedor inactivo excluido de la seleccion de Compras despues del reinicio.')
     api(f"proveedores/{proveedor['id']}/estado", {'activo': True})
     verificar(any(p['id'] == proveedor['id'] for p in api('proveedores')), 'Reactivacion del proveedor persistida.')
-    api('compras', {'proveedorId': proveedor['id'], 'items': [{'productoId': 1, 'cantidad': 1, 'costoUnitario': 2}]}, esperado=400)
+    api('compras', {'proveedorId': proveedor['id'], 'items': []}, esperado=400)
     pagina_compras = html.unescape(admin.open(base + '/Home/Compras').read().decode())
-    verificar('El registro de ventas y compras estará disponible' in pagina_compras, 'Compras informa que el registro esta pendiente y protege las existencias SQL.')
+    verificar('se guardan juntos en la base de datos' in pagina_compras and 'data-pendiente="false"' in pagina_compras, 'Compras informa que el registro transaccional esta conectado.')
 else:
     proveedores = api('proveedores?incluirInactivos=true')
     verificar(len(proveedores) == 12, 'La API muestra los 12 proveedores cargados en SQL.')
@@ -149,7 +149,7 @@ else:
     api(ruta_proveedor + '/editar', datos_proveedor, conexion=caja, esperado=403)
     api(ruta_proveedor + '/estado', {'activo': True}, conexion=caja, esperado=403)
     api('compras', {'proveedorId': proveedor['id'], 'items': [{'productoId': 1, 'cantidad': 1, 'costoUnitario': 2}]}, esperado=400)
-    verificar(not api('compras'), 'Comprar a un proveedor inactivo no registra movimientos de practica.')
+    verificar(len(api('compras')) == 60, 'Comprar a un proveedor inactivo conserva las 60 compras originales.')
 
 datos_producto = {'codigo': 'QA_HTTP_01', 'nombre': 'Producto HTTP 100% [SQL]', 'precio': 6.5, 'stockInicial': 0, 'stockMinimo': 5}
 if '--verificar-reinicio' in sys.argv:
@@ -203,6 +203,41 @@ else:
     for forma in ['Efectivo', 'Digital', 'Fiado']:
         api('ventas', {'formaPago': forma, 'montoRecibido': 100, 'referenciaPago': 'PRUEBA', 'clienteId': 1,
             'items': [{'productoId': sustituto['id'], 'cantidad': 1}]}, esperado=400)
-    api('compras', {'proveedorId': 1, 'items': [{'productoId': sustituto['id'], 'cantidad': 1, 'costoUnitario': 2}]}, esperado=400)
-    verificar(api(f"productos/{sustituto['id']}")['producto']['stock'] == 10 and not api('compras') and not api('ventas'), 'Registrar movimientos pendientes no cambia stock ni genera movimientos en memoria.')
+    verificar(api(f"productos/{sustituto['id']}")['producto']['stock'] == 10 and len(api('compras')) == 60 and not api('ventas'), 'Las ventas pendientes no cambian stock ni el historial de compras SQL.')
+
+if '--verificar-reinicio' in sys.argv:
+    compras = api('compras')
+    compra = next(c for c in compras if any(d['codigo'] == 'QA_HTTP_02' for d in c['detalles']))
+    verificar(len(compras) == 61 and compra['total'] == 5 and compra['usuarioId'] == 1, 'La compra y el usuario se conservan al reiniciar el servidor.')
+    verificar(api(f"compras/{compra['id']}")['detalles'][0]['cantidad'] == 2 and api('productos?busqueda=QA_HTTP_02')[0]['stock'] == 12, 'Detalle y stock repuesto se recuperan despues del reinicio.')
+else:
+    compras = api('compras')
+    verificar(len(compras) == 60 and all(c['detalles'] and c['usuarioId'] for c in compras), 'La API consulta compras, detalles y usuarios de la carga original.')
+    api('compras/2147483647', esperado=400)
+    proveedor_compra = api('proveedores')[0]
+    producto_compra = api('productos?busqueda=QA_HTTP_02')[0]
+    compra_datos = {'proveedorId': proveedor_compra['id'], 'usuarioId': 2, 'idUsuario': 2, 'total': 999, 'fecha': '2000-01-01',
+        'items': [{'productoId': producto_compra['id'], 'cantidad': 2, 'costoUnitario': 2.5, 'subtotal': 999}]}
+    compra = api('compras', compra_datos)
+    verificar(compra['usuarioId'] == 1 and compra['total'] == 5 and not compra['fecha'].startswith('2000'), 'Usuario, fecha y totales se obtienen del servidor sin aceptar valores falsificados.')
+    verificar(api(f"compras/{compra['id']}")['detalles'][0]['subtotal'] == 5 and api('productos?busqueda=QA_HTTP_02')[0]['stock'] == 12, 'La compra guarda detalles y repone el stock SQL.')
+    api('compras', compra_datos, conexion=caja, esperado=403)
+    api('compras', conexion=caja, esperado=403)
+    api(f"compras/{compra['id']}", conexion=caja, esperado=403)
+    api('compras', compra_datos, esperado=400, con_token=False)
+    api('compras', {**compra_datos, 'items': []}, esperado=400)
+    api('compras', {**compra_datos, 'proveedorId': 2147483647}, esperado=400)
+    api('compras', {**compra_datos, 'proveedorId': proveedor['id']}, esperado=400)
+    for items_invalidos in [
+        [compra_datos['items'][0], compra_datos['items'][0]],
+        [compra_datos['items'][0], {'productoId': 2147483647, 'cantidad': 1, 'costoUnitario': 1}],
+        [{'productoId': producto_compra['id'], 'cantidad': 0, 'costoUnitario': 1}],
+        [{'productoId': producto_compra['id'], 'cantidad': 1, 'costoUnitario': .001}],
+        [{'productoId': producto_compra['id'], 'cantidad': 2147483647, 'costoUnitario': 1}],
+        [{'productoId': producto_compra['id'], 'cantidad': 1, 'costoUnitario': 10000000000000000}]
+    ]: api('compras', {**compra_datos, 'items': items_invalidos}, esperado=400)
+    api(f"productos/{producto_compra['id']}/estado", {'activo': False})
+    api('compras', compra_datos, esperado=400)
+    api(f"productos/{producto_compra['id']}/estado", {'activo': True})
+    verificar(len(api('compras')) == 61 and api('productos?busqueda=QA_HTTP_02')[0]['stock'] == 12, 'Compras rechazadas conservan cabeceras y stock confirmados.')
 print(f'{comprobaciones} comprobaciones HTTP con SQL correctas.')

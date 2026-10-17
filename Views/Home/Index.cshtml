@@ -28,9 +28,13 @@
     {
       <p>El inventario, el stock mínimo y las alternativas se guardan en la base de datos. Puedes consultar las existencias y las alertas de reposición.</p>
       <p>@Tienda_Giovanna.Services.TiendaService.StockPendiente</p>
-      <p>Los reportes de movimientos todavía no muestran el historial de ventas y compras de la base de datos.</p>
+      <p>Los reportes de ventas y abonos todavía no muestran los movimientos de la base de datos.</p>
     }
-    else
+    @if (Tienda.ComprasEnSql)
+    {
+      <p>Las compras y sus detalles se guardan junto con el aumento de stock. Puedes consultar el historial de compras y el usuario que registró cada operación.</p>
+    }
+    else if (!Tienda.ProductosEnSql)
     {
       <p>Inventario, compras, ventas y reportes siguen con datos temporales de práctica.</p>
     }

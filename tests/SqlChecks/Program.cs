@@ -284,4 +284,74 @@ finally
     using var cmd = new SqlCommand("DELETE FROM ProductosAlternativos WHERE IdProducto IN (SELECT IdProducto FROM Productos WHERE Codigo IN ('QA_SQL_01','QA_SQL_02','QA_SQL_03','QA_SQL_DUPE')) OR IdAlternativo IN (SELECT IdProducto FROM Productos WHERE Codigo IN ('QA_SQL_01','QA_SQL_02','QA_SQL_03','QA_SQL_DUPE')); DELETE FROM Productos WHERE Codigo IN ('QA_SQL_01','QA_SQL_02','QA_SQL_03','QA_SQL_DUPE')", c); cmd.ExecuteNonQuery();
 }
 Verificar(tiendaCatalogo.BuscarProductos(null, true).Count == 120 && Escalar("SELECT COUNT(*) FROM ProductosAlternativos") == 56 && productosSql.ContarStockBajo() == 7, "Pruebas de productos dejan intactos el catalogo, las alternativas y las alertas originales.");
+
+// Compras: cabecera, detalles y stock se confirman o revierten juntos.
+var comprasSql = new ComprasSqlService(ConexionBD.Instancia);
+var tiendaCompras = new TiendaService(clientesSql, proveedoresSql, productosSql, comprasSql);
+Verificar(tiendaCompras.ConsultarCompras().Count == 60 && tiendaCompras.ConsultarCompras().All(c => c.Detalles.Count > 0 && c.UsuarioId > 0), "Historial SQL de 60 compras con sus detalles y usuarios.");
+Verificar(tiendaCompras.ConsultarCompra(1).Total == tiendaCompras.ConsultarCompra(1).Detalles.Sum(d => d.Subtotal), "La ficha de una compra original coincide con sus detalles.");
+Rechazar(() => tiendaCompras.ConsultarCompra(int.MaxValue), "Consultar compra inexistente devuelve error controlado.");
+var proveedorCompra = proveedoresSql.RegistrarProveedor(new() { Ruc = "20990000100", RazonSocial = "Proveedor de compras SQL" });
+var productoA = productosSql.RegistrarProducto(new() { Codigo = "QA_COMPRA_A", Nombre = "Producto compra A", Precio = 9, StockInicial = 0, StockMinimo = 2 });
+var productoB = productosSql.RegistrarProducto(new() { Codigo = "QA_COMPRA_B", Nombre = "Producto compra B", Precio = 8, StockInicial = 10, StockMinimo = 2 });
+var productoLimite = productosSql.RegistrarProducto(new() { Codigo = "QA_COMPRA_MAX", Nombre = "Producto al limite", Precio = 1, StockInicial = int.MaxValue });
+CompraSolicitud SolicitudCompraSql() => new() { ProveedorId = proveedorCompra.Id, Items = new()
+    { new() { ProductoId = productoB.Id, Cantidad = 3, CostoUnitario = 1.235m }, new() { ProductoId = productoA.Id, Cantidad = 2, CostoUnitario = 2.50m } } };
+void SqlCompraPrueba(string sql)
+{
+    using var c = ConexionBD.Instancia.CrearConexion(); c.Open();
+    using var cmd = new SqlCommand(sql, c); cmd.ExecuteNonQuery();
+}
+try
+{
+    Rechazar(() => tiendaCompras.RegistrarCompra(SolicitudCompraSql()), "SQL exige identificar al usuario que registra la compra.");
+    Rechazar(() => tiendaCompras.RegistrarCompra(SolicitudCompraSql(), 2), "El servicio SQL tambien rechaza registrar como cajero.");
+    Rechazar(() => tiendaCompras.RegistrarCompra(SolicitudCompraSql(), int.MaxValue), "Usuario inexistente no puede registrar compras.");
+    DateTimeOffset antesCompra = DateTimeOffset.UtcNow;
+    Compra compraSql = tiendaCompras.RegistrarCompra(SolicitudCompraSql(), 1);
+    Verificar(compraSql.Total == 8.72m && compraSql.Detalles.Count == 2 && compraSql.Detalles.Sum(d => d.Subtotal) == compraSql.Total, "Compra multiple guarda costos redondeados y totales exactos.");
+    Verificar(compraSql.UsuarioId == 1 && !string.IsNullOrWhiteSpace(compraSql.UsuarioNombre) && compraSql.Fecha >= antesCompra.AddSeconds(-2) && compraSql.Fecha <= DateTimeOffset.UtcNow.AddSeconds(2), "SQL guarda usuario real y fecha de la operacion.");
+    Verificar(Ficha(productoA.Id).Stock == 2 && Ficha(productoB.Id).Stock == 13 && Ficha(productoA.Id).Precio == 9, "La compra repone todos los productos sin cambiar sus precios de venta.");
+    var compraPersistida = new ComprasSqlService(ConexionBD.Instancia).ConsultarCompra(compraSql.Id);
+    Verificar(JsonSerializer.Serialize(compraPersistida) == JsonSerializer.Serialize(compraSql), "Una instancia nueva recupera la compra y sus detalles desde SQL.");
+    proveedoresSql.EditarProveedor(proveedorCompra.Id, new() { Ruc = proveedorCompra.Ruc, RazonSocial = "Proveedor renombrado" });
+    productosSql.EditarProducto(productoA.Id, new() { Codigo = productoA.Codigo, Nombre = "Articulo renombrado", Precio = 11, StockMinimo = 2 });
+    Verificar(tiendaCompras.ConsultarCompra(compraSql.Id).ProveedorNombre == "Proveedor de compras SQL" && tiendaCompras.ConsultarCompra(compraSql.Id).Detalles.Single(d => d.ProductoId == productoA.Id).ProductoNombre == "Producto compra A", "Las compras conservan los nombres historicos de proveedor y productos.");
+    int comprasAntes = tiendaCompras.ConsultarCompras().Count;
+    string stockAntes = JsonSerializer.Serialize(tiendaCatalogo.BuscarProductos(null, true).Select(p => new { p.Id, p.Stock }));
+    foreach (var invalida in new[]
+    {
+        new CompraSolicitud { ProveedorId = proveedorCompra.Id },
+        new CompraSolicitud { ProveedorId = proveedorCompra.Id, Items = new() { new() { ProductoId = productoA.Id, Cantidad = 1, CostoUnitario = .001m } } },
+        new CompraSolicitud { ProveedorId = proveedorCompra.Id, Items = new() { new() { ProductoId = productoA.Id, Cantidad = 1, CostoUnitario = decimal.MaxValue } } },
+        new CompraSolicitud { ProveedorId = proveedorCompra.Id, Items = new() { new() { ProductoId = productoA.Id, Cantidad = 1, CostoUnitario = 1 }, new() { ProductoId = productoA.Id, Cantidad = 1, CostoUnitario = 1 } } },
+        new CompraSolicitud { ProveedorId = proveedorCompra.Id, Items = new() { new() { ProductoId = productoA.Id, Cantidad = 1, CostoUnitario = 1 }, new() { ProductoId = int.MaxValue, Cantidad = 1, CostoUnitario = 1 } } },
+        new CompraSolicitud { ProveedorId = proveedorCompra.Id, Items = new() { new() { ProductoId = productoLimite.Id, Cantidad = 1, CostoUnitario = 1 } } }
+    }) Rechazar(() => tiendaCompras.RegistrarCompra(invalida, 1), "Compra invalida rechazada sin guardar parcialmente.");
+    proveedoresSql.CambiarEstadoProveedor(proveedorCompra.Id, new() { Activo = false });
+    Rechazar(() => tiendaCompras.RegistrarCompra(SolicitudCompraSql(), 1), "Proveedor inactivo no admite nuevas compras.");
+    Verificar(tiendaCompras.ConsultarCompra(compraSql.Id).Total == 8.72m, "Desactivar proveedor no oculta sus compras historicas.");
+    proveedoresSql.CambiarEstadoProveedor(proveedorCompra.Id, new() { Activo = true });
+    productosSql.CambiarEstadoProducto(productoB.Id, new() { Activo = false });
+    Rechazar(() => tiendaCompras.RegistrarCompra(SolicitudCompraSql(), 1), "Producto inactivo no admite nuevas compras.");
+    productosSql.CambiarEstadoProducto(productoB.Id, new() { Activo = true });
+    Verificar(comprasAntes == tiendaCompras.ConsultarCompras().Count && stockAntes == JsonSerializer.Serialize(tiendaCatalogo.BuscarProductos(null, true).Select(p => new { p.Id, p.Stock })), "Todas las validaciones conservan compras y stock previos.");
+    // Forzar un fallo al insertar el segundo detalle, despues de reponer el primero.
+    // El trigger existe solo en la base aislada de pruebas y se elimina en finally.
+    SqlCompraPrueba($"CREATE TRIGGER qa_Prueba_Compra_Atomicidad ON DetalleCompras AFTER INSERT AS BEGIN SET NOCOUNT ON; IF EXISTS (SELECT 1 FROM inserted WHERE IdProducto = {productoB.Id}) BEGIN ;THROW 51090, N'Fallo controlado de prueba.', 1; END; END;");
+    bool falloForzado = false;
+    try { tiendaCompras.RegistrarCompra(SolicitudCompraSql(), 1); }
+    catch (SqlException error) when (error.Number == 51090) { falloForzado = true; }
+    finally { SqlCompraPrueba("DROP TRIGGER IF EXISTS qa_Prueba_Compra_Atomicidad"); }
+    Verificar(falloForzado && comprasAntes == tiendaCompras.ConsultarCompras().Count && stockAntes == JsonSerializer.Serialize(tiendaCatalogo.BuscarProductos(null, true).Select(p => new { p.Id, p.Stock })), "Un fallo durante la escritura revierte cabecera, detalles e incrementos previos de stock.");
+    var concurrentes = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => Task.Run(() => new ComprasSqlService(ConexionBD.Instancia).RegistrarCompra(SolicitudCompraSql(), 1))));
+    Verificar(concurrentes.Select(c => c.Id).Distinct().Count() == 2 && Ficha(productoA.Id).Stock == 6 && Ficha(productoB.Id).Stock == 19, "Compras simultaneas del mismo stock no pierden incrementos ni mezclan detalles.");
+    Verificar(tiendaCompras.ConsultarCompras().Count == 63 && Escalar("SELECT COUNT(*) FROM Compras c WHERE c.Total <> (SELECT SUM(d.Subtotal) FROM DetalleCompras d WHERE d.IdCompra = c.IdCompra)") == 0, "Todas las compras confirmadas coinciden con sus detalles SQL.");
+}
+finally
+{
+    SqlCompraPrueba("DROP TRIGGER IF EXISTS qa_Prueba_Compra_Atomicidad");
+    SqlCompraPrueba($"DELETE FROM DetalleCompras WHERE IdCompra IN (SELECT IdCompra FROM Compras WHERE IdProveedor = {proveedorCompra.Id}); DELETE FROM Compras WHERE IdProveedor = {proveedorCompra.Id}; DELETE FROM Productos WHERE IdProducto IN ({productoA.Id}, {productoB.Id}, {productoLimite.Id}); DELETE FROM Proveedores WHERE IdProveedor = {proveedorCompra.Id}");
+}
+Verificar(tiendaCompras.ConsultarCompras().Count == 60 && tiendaCatalogo.BuscarProductos(null, true).Count == 120 && productosSql.ContarStockBajo() == 7, "Pruebas de compras dejan intacta la carga original.");
 Console.WriteLine($"{comprobaciones} comprobaciones SQL correctas.");

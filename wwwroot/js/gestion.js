@@ -6,7 +6,7 @@ function renderLineasCompra() {
         boton('Quitar', () => { lineasCompra = lineasCompra.filter(p => p.productoId !== i.productoId); renderLineasCompra(); })]);
     $('totalCompra').textContent = dinero(lineasCompra.reduce((s, i) => s + Math.round(i.cantidad * i.costoUnitario * 100), 0) / 100);
     const enviar = $('formCompra').querySelector('button[type=submit]');
-    enviar.dataset.bloqueado = String(lineasCompra.length === 0 || !$('proveedorCompra').value);
+    enviar.dataset.bloqueado = String(lineasCompra.length === 0 || !$('proveedorCompra').value || $('formCompra').dataset.pendiente === 'true');
     enviar.disabled = enviar.dataset.bloqueado === 'true';
 }
 async function detalleCompra(id) {
@@ -14,7 +14,7 @@ async function detalleCompra(id) {
         const compra = await api('compras/' + id);
         const lista = document.createElement('ul');
         compra.detalles.forEach(d => lista.append(elemento('li', `${d.codigo} · ${d.productoNombre} × ${d.cantidad} · ${dinero(d.costoUnitario)} c/u · Subtotal: ${dinero(d.subtotal)}`)));
-        abrirDetalle('Compra N.º ' + compra.id, [elemento('p', `${fecha(compra.fecha)} · ${compra.proveedorNombre}`), lista, elemento('p', 'Total: ' + dinero(compra.total))]);
+        abrirDetalle('Compra N.º ' + compra.id, [elemento('p', `${fecha(compra.fecha)} · ${compra.proveedorNombre}`), elemento('p', 'Usuario: ' + (compra.usuarioNombre || 'Práctica')), lista, elemento('p', 'Total: ' + dinero(compra.total))]);
     } catch (e) { mensaje('mensajeCompra', e.message, true); }
 }
 function renderTablaClientes() {

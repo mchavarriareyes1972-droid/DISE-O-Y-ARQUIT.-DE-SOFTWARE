@@ -288,7 +288,8 @@ async function iniciarInventario() {
 
 async function renderCompras() {
     const compras = await api('compras');
-    tabla('tablaCompras', compras, 6, c => [c.id, fecha(c.fecha), c.proveedorNombre, c.detalles.length, dinero(c.total), boton('Ver detalle', () => detalleCompra(c.id))]);
+    $('cantidadCompras').textContent = `Compras registradas: ${compras.length}`;
+    tabla('tablaCompras', compras, 7, c => [c.id, fecha(c.fecha), c.proveedorNombre, c.usuarioNombre || 'Práctica', c.detalles.length, dinero(c.total), boton('Ver detalle', () => detalleCompra(c.id))]);
 }
 async function iniciarCompras() {
     const seleccionar = productos => {
@@ -299,6 +300,7 @@ async function iniciarCompras() {
     const proveedores = await api('proveedores');
     opciones($('proveedorCompra'), proveedores, p => `${p.ruc} · ${p.razonSocial}`, p => p.id);
     $('avisoProveedor').textContent = proveedores.length ? '' : 'Registra o activa un proveedor en el módulo Proveedores antes de comprar.';
+    $('proveedorCompra').addEventListener('change', renderLineasCompra);
     renderLineasCompra();
     await renderCompras();
     formulario('formLineaCompra', 'mensajeCompra', async () => {
@@ -315,6 +317,8 @@ async function iniciarCompras() {
         const compra = await api('compras', { proveedorId: Number($('proveedorCompra').value), items: lineasCompra.map(({ productoId, cantidad, costoUnitario }) => ({ productoId, cantidad, costoUnitario })) });
         lineasCompra = []; renderLineasCompra();
         await renderCompras();
+        const [actuales, encontrados] = await Promise.all([api('productos'), api('productos?busqueda=' + encodeURIComponent($('buscarCompra').value))]);
+        catalogo = actuales; seleccionar(encontrados);
         mensaje('mensajeCompra', `Compra N.º ${compra.id} registrada. Total: ${dinero(compra.total)}. El stock fue actualizado.`);
     });
 }

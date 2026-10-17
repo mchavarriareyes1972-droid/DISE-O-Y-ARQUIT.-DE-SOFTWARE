@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 using Tienda_Giovanna.Models;
 using Tienda_Giovanna.Services;
 
@@ -56,7 +57,12 @@ public class TiendaController : ControllerBase
     }
     [HttpPost("ventas"), ValidateAntiForgeryToken] public IActionResult Venta(VentaSolicitud solicitud) => Operacion(() => tienda.RegistrarVenta(solicitud));
     [HttpPost("pagos"), ValidateAntiForgeryToken] public IActionResult Pago(PagoSolicitud solicitud) => Operacion(() => tienda.RegistrarPago(solicitud));
-    [Authorize(Roles = Roles.Administrador), HttpPost("compras"), ValidateAntiForgeryToken] public IActionResult Compra(CompraSolicitud solicitud) => Operacion(() => tienda.RegistrarCompra(solicitud));
+    [Authorize(Roles = Roles.Administrador), HttpPost("compras"), ValidateAntiForgeryToken]
+    public IActionResult Compra(CompraSolicitud solicitud)
+    {
+        if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int usuarioId) || usuarioId <= 0) return Unauthorized();
+        return Operacion(() => tienda.RegistrarCompra(solicitud, usuarioId));
+    }
     [Authorize(Roles = Roles.Administrador), HttpPost("stock-minimo"), ValidateAntiForgeryToken] public IActionResult StockMinimo(StockMinimoSolicitud solicitud) => Operacion(() => tienda.ActualizarStockMinimo(solicitud));
     [Authorize(Roles = Roles.Administrador), HttpPost("alternativas"), ValidateAntiForgeryToken] public IActionResult Alternativas(AlternativasSolicitud solicitud) => Operacion(() => tienda.RegistrarAlternativas(solicitud));
 }

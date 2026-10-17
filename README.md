@@ -47,7 +47,7 @@ Server=localhost;Database=BodegaGiovanna;Integrated Security=True;Encrypt=True;T
 
 `TrustServerCertificate=True` permite el certificado local de esta instalación de prácticas. Si otro compañero ejecuta el proyecto, debe cambiar el nombre del servidor en su configuración; no necesita la contraseña de Windows en la cadena. También se puede sustituir la conexión con la variable `ConnectionStrings__BodegaGiovanna`.
 
-Los modos `Persistencia:Usuarios=Memoria`, `Persistencia:Clientes=Memoria`, `Persistencia:Proveedores=Memoria` y `Persistencia:Productos=Memoria` se conservan **solo como selección explícita para pruebas sin SQL**. Los cuatro valores predeterminados son `SqlServer`: un fallo de conexión no activa registros alternativos ni cambia automáticamente a memoria. Para ejecutar todas las pruebas HTTP sin SQL, configura las cuatro variables `Persistencia__Usuarios=Memoria`, `Persistencia__Clientes=Memoria`, `Persistencia__Proveedores=Memoria` y `Persistencia__Productos=Memoria`.
+Los modos `Persistencia:Usuarios=Memoria`, `Persistencia:Clientes=Memoria`, `Persistencia:Proveedores=Memoria`, `Persistencia:Productos=Memoria` y `Persistencia:Compras=Memoria` se conservan **solo como selección explícita para pruebas sin SQL**. Los cinco valores predeterminados son `SqlServer`: un fallo de conexión no activa registros alternativos ni cambia automáticamente a memoria. Para ejecutar todas las pruebas HTTP sin SQL, configura las cinco variables `Persistencia__Usuarios=Memoria`, `Persistencia__Clientes=Memoria`, `Persistencia__Proveedores=Memoria`, `Persistencia__Productos=Memoria` y `Persistencia__Compras=Memoria`.
 
 ## Clientes conectados a SQL Server
 
@@ -60,7 +60,7 @@ La deuda se obtiene de `vw_SaldosClientes` (saldo inicial + ventas al fiado - ab
 3. Registra un cliente de prueba y edita sus datos. Detén la aplicación y vuelve a ejecutarla: los cambios permanecen. Puedes confirmarlos con `SELECT * FROM Clientes` en SSMS.
 4. Desactiva y reactiva ese cliente. El cajero puede consultar los datos; solo el administrador puede modificarlos.
 
-**Alcance de esta etapa:** el registro de nuevos fiados y abonos queda temporalmente deshabilitado en modo SQL hasta migrar ventas y pagos. Las pantallas lo indican y la API también rechaza esas operaciones antes de cambiar stock o saldos. Así se evita registrar movimientos temporales sobre clientes reales de la base. La consulta de saldos e historial sí funciona. Al conectar también el catálogo de productos, las nuevas ventas y compras se bloquean hasta migrar sus transacciones. Los reportes de movimientos siguen pendientes. No ejecutes nuevamente los scripts ni vacíes las tablas.
+**Alcance de esta etapa:** el registro de nuevos fiados y abonos queda temporalmente deshabilitado en modo SQL hasta migrar ventas y pagos. Las pantallas lo indican y la API también rechaza esas operaciones antes de cambiar stock o saldos. Así se evita registrar movimientos temporales sobre clientes reales de la base. La consulta de saldos e historial sí funciona. Las compras ya guardan sus transacciones y reponen el stock; las nuevas ventas permanecen pendientes de conexión. Los reportes de movimientos siguen pendientes. No ejecutes nuevamente los scripts ni vacíes las tablas.
 
 ## Proveedores conectados a SQL Server
 
@@ -68,9 +68,9 @@ La deuda se obtiene de `vw_SaldosClientes` (saldo inicial + ventas al fiado - ab
 
 1. Actualiza `avance-rf-csharp`, ejecuta con F5 y abre **Proveedores** como administrador: con la carga original verás **12 proveedores registrados**, sus contactos y estados.
 2. Busca por razón social o RUC, registra un proveedor de prueba y edita sus datos. Detén y vuelve a ejecutar: los cambios permanecen. Confírmalos con `SELECT * FROM Proveedores` en SSMS.
-3. Desactiva y reactiva el proveedor. El listado de Compras solo ofrece proveedores activos. El registro de compras se habilitará al completar la conexión de los movimientos.
+3. Desactiva y reactiva el proveedor. El listado de Compras solo ofrece proveedores activos y el servidor comprueba su estado al registrar la operación.
 
-Los datos históricos en `Compras` y `DetalleCompras` no se modifican al editar o desactivar un proveedor. El acceso a Proveedores y Compras sigue reservado al administrador. **Las nuevas compras quedan temporalmente deshabilitadas cuando el catálogo de productos usa SQL**: la pantalla lo indica. La selección reconoce los proveedores activos reales, incluidos los recién creados. Al migrar Compras se guardará cada operación junto con sus detalles y su incremento de stock. No es necesario ejecutar scripts nuevos.
+Los datos históricos en `Compras` y `DetalleCompras` no se modifican al editar o desactivar un proveedor. El acceso a Proveedores y Compras sigue reservado al administrador. La selección de Compras reconoce los proveedores activos reales, incluidos los recién creados. Cada compra guarda sus detalles y repone las existencias de forma transaccional. No es necesario ejecutar scripts nuevos.
 
 ## Productos y alternativas conectados a SQL Server
 
@@ -81,7 +81,21 @@ Los datos históricos en `Compras` y `DetalleCompras` no se modifican al editar 
 3. Desactiva y reactiva desde **Mostrar también productos inactivos**. El cajero consulta, y el administrador modifica el catálogo.
 4. Configura **Productos alternativos**. El reemplazo de relaciones es una transacción: se valida que todos existan y estén activos antes de cambiar la selección. No admite el mismo producto como sustituto y elimina duplicados. Una lista vacía quita todas las alternativas. La ficha solo ofrece sustitutos activos con stock y un producto original activo.
 
-**Registro de movimientos pendiente:** con el catálogo SQL, las nuevas ventas y compras están bloqueadas tanto en pantalla como en C# para evitar descuentos o reposiciones sin guardar el movimiento completo. Puedes consultar productos y alternativas y preparar un detalle como vista previa. Se habilitarán al migrar las transacciones de Compras y Ventas. No ejecutes scripts nuevos, no vacíes tablas y no vuelvas a cargar los datos.
+**Ventas pendientes:** las nuevas ventas siguen bloqueadas hasta guardar sus transacciones y descuentos de stock. Las compras ya están habilitadas y guardan el movimiento completo junto con la reposición. Puedes consultar productos y alternativas. No ejecutes scripts nuevos, no vacíes tablas y no vuelvas a cargar los datos.
+
+## Compras conectadas a SQL Server
+
+`Services/ComprasSqlService.cs` consulta `Compras` y `DetalleCompras` mediante el mismo Singleton. La pantalla muestra las **60 compras originales**, sus detalles, totales y usuarios. Los nombres del proveedor y de los productos se conservan como se registraron; editar los catálogos no reescribe el historial.
+
+Al guardar una compra, el controlador toma el identificador de la sesión, y SQL comprueba que corresponda a un administrador activo. No se acepta el usuario ni el total enviados como campos adicionales del navegador. SQL asigna el identificador y la fecha. El servidor valida proveedor y productos activos, cantidades enteras positivas, líneas sin productos repetidos, costos redondeados a dos decimales, límites monetarios y capacidad del stock.
+
+La cabecera, todos los detalles y los incrementos de stock usan una sola transacción y una sola conexión de operación. Los productos se bloquean en orden de identificador para coordinar compras concurrentes. Si falla una línea o una escritura, se revierte toda la compra y el stock. El precio de venta no cambia al registrar un costo de compra.
+
+1. Actualiza `avance-rf-csharp`, ejecuta con F5 e ingresa como administrador. Abre **Compras** y revisa el historial y sus detalles.
+2. Selecciona un proveedor activo, agrega uno o varios productos con cantidades y costos, y pulsa **Registrar compra**.
+3. Comprueba el nuevo registro, el usuario de la operación y las existencias en **Inventario**. Reinicia y confirma que la compra y su reposición permanecen.
+
+`Persistencia:Compras=SqlServer` requiere también Usuarios, Proveedores y Productos en SqlServer, para usar las mismas identidades y existencias. El modo explícito de memoria se conserva para las pruebas. La aplicación no modifica la estructura ni vuelve a cargar datos al arrancar; no necesitas scripts nuevos.
 
 ## Funciones disponibles
 
@@ -111,6 +125,8 @@ Los datos históricos en `Compras` y `DetalleCompras` no se modifican al editar 
 - `Services/ProveedoresValidacion.cs`: validación compartida de RUC, correo y campos del proveedor.
 - `Services/ProductosSqlService.cs`: persistencia de productos, stock mínimo y alternativas; consulta de fichas y alertas.
 - `Services/ProductosValidacion.cs`: normalización y validación compartida de códigos, precios y mínimos.
+- `Services/ComprasSqlService.cs`: consulta y guardado transaccional de compras, detalles y existencias.
+- `Services/ComprasValidacion.cs`: validación compartida de líneas, costos, cantidades y límites.
 - `Datos/ConexionBD.cs`: Singleton que configura y crea conexiones a SQL Server.
 - `Services/IUsuariosService.cs`: contrato común de cuentas y sesiones.
 - `Services/UsuariosSqlService.cs`: cuentas, contraseñas y validación de sesiones persistidas.
@@ -120,7 +136,7 @@ Los datos históricos en `Compras` y `DetalleCompras` no se modifican al editar 
 - `Views/Home`: pantallas MVC.
 - `wwwroot/js/site.js`: presenta las respuestas de C# y envía las operaciones.
 
-**Etapa actual:** usuarios, clientes, proveedores, productos y alternativas usan SQL Server. Clientes muestra las deudas y pagos existentes; Inventario muestra los 120 productos originales y los que registres, y las alertas consultan las existencias reales. El registro de nuevas ventas, compras y abonos está pendiente de migrar sus transacciones y permanece deshabilitado en modo SQL. Los reportes de movimientos aún no muestran el historial cargado en SQL; su indicador de stock bajo sí consulta la base. Reiniciar conserva los catálogos y las relaciones. No hay integración con Yape o Plin.
+**Etapa actual:** usuarios, clientes, proveedores, productos, alternativas y compras usan SQL Server. Clientes consulta las deudas y pagos existentes. Inventario muestra el catálogo y las existencias reales; Compras muestra el historial y guarda las nuevas operaciones con sus detalles, usuario y aumento de stock. Las nuevas ventas y abonos permanecen pendientes de migración. Los reportes de ventas y abonos aún no muestran el historial de SQL; el indicador de stock bajo sí consulta la base. Reiniciar conserva los catálogos, relaciones, compras y existencias. No hay integración con Yape o Plin.
 
 La exportación PDF usa QuestPDF 2026.9.1 con licencia Community para este proyecto académico. Visual Studio restaura el paquete NuGet al compilar por primera vez; después la generación se realiza localmente.
 
@@ -141,4 +157,4 @@ GitHub Actions compila el proyecto y ejecuta las comprobaciones en cada actualiz
 
 ## Pruebas con SQL Server
 
-El flujo `verificar-sql.yml` crea un SQL Server 2022 temporal, ejecuta los dos scripts completos, comprueba los hashes de las cuentas con PasswordHasher de .NET y prueba el Singleton, persistencia, bloqueos, permisos y operaciones HTTP. Para clientes comprueba DNI único ante concurrencia, conservación de deuda e historial, filtros, permisos y protección antifalsificación. Para proveedores comprueba RUC único, campos opcionales, validación de correo, conservación de compras históricas y selección de proveedores activos en Compras. Además reinicia el servidor web para comprobar la persistencia de ediciones y bajas, y prueba las reactivaciones. Para productos comprueba códigos únicos, precios, stock, metadatos e historial conservados, alternativas transaccionales, concurrencia, filtros de activos y disponibles, alertas y bloqueo de movimientos pendientes. Chromium verifica los recorridos de los catálogos y sus permisos. Las claves del contenedor y de las cuentas se generan al ejecutar CI; no se almacenan en el repositorio. La autenticación SQL del contenedor solo se usa en CI; la configuración local sigue usando Windows. La conexión a localhost debe comprobarse desde ese equipo.
+El flujo `verificar-sql.yml` crea un SQL Server 2022 temporal, ejecuta los dos scripts completos, comprueba los hashes de las cuentas con PasswordHasher de .NET y prueba el Singleton, persistencia, bloqueos, permisos y operaciones HTTP. Para clientes comprueba DNI único ante concurrencia, conservación de deuda e historial, filtros, permisos y protección antifalsificación. Para proveedores comprueba RUC único, campos opcionales, validación de correo, conservación de compras históricas y selección de proveedores activos en Compras. Además reinicia el servidor web para comprobar la persistencia de ediciones y bajas, y prueba las reactivaciones. Para productos comprueba códigos únicos, precios, stock, metadatos e historial conservados, alternativas transaccionales, concurrencia, filtros de activos y disponibles, alertas y bloqueo de movimientos pendientes. Para Compras verifica la reposición concurrente, el usuario de sesión, importes, límites, historial persistente y reversión completa ante un fallo provocado durante la escritura del segundo detalle. El trigger de esa prueba solo existe en la base temporal y se elimina al terminar. Chromium verifica los recorridos de catálogos y compras, el detalle, las existencias y los permisos. Las claves del contenedor y de las cuentas se generan al ejecutar CI; no se almacenan en el repositorio. La autenticación SQL del contenedor solo se usa en CI; la configuración local sigue usando Windows. La conexión a localhost debe comprobarse desde ese equipo.
