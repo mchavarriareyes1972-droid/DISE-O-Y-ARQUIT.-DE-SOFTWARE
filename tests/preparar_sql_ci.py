@@ -21,7 +21,7 @@ contenedor = subprocess.run([
     '-p', '127.0.0.1:1433:1433', 'mcr.microsoft.com/mssql/server:2022-latest'
 ], env=entorno, capture_output=True, text=True, check=True).stdout.strip()
 sqlcmd = ['docker', 'exec', '-e', 'SQLCMDPASSWORD', contenedor,
-          '/opt/mssql-tools18/bin/sqlcmd', '-S', 'localhost', '-U', 'sa', '-C', '-b']
+          '/opt/mssql-tools18/bin/sqlcmd', '-S', 'localhost', '-U', 'sa', '-C', '-b', '-I', '-l', '2']
 for intento in range(60):
     listo = subprocess.run(sqlcmd + ['-Q', 'SELECT 1'], env=entorno, capture_output=True, timeout=10)
     if listo.returncode == 0:
