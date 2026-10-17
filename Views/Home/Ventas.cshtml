@@ -1,9 +1,13 @@
 @inject Tienda_Giovanna.Services.TiendaService Tienda
 @{ ViewData["Title"] = "Ventas"; }
 <div class="page-heading"><div><p class="eyebrow">PUNTO DE VENTA</p><h1>Registrar venta</h1><p>Busca por nombre o código y selecciona la forma de pago.</p></div></div>
-@if (Tienda.ProductosEnSql)
+@if (Tienda.VentasPendientes)
 {
     <p class="notice" role="status">@Tienda_Giovanna.Services.TiendaService.StockPendiente</p>
+}
+@if (Tienda.VentasEnSql)
+{
+    <p class="notice" role="status">Las ventas y sus detalles se guardan en la base de datos junto con el descuento de stock. Los fiados actualizan la deuda del cliente. Puedes revisar cada operación en Reportes.</p>
 }
 <div class="two-columns">
     <section class="card">
@@ -18,8 +22,8 @@
         <div class="total-row"><strong>Total</strong><strong id="totalVenta">S/ 0.00</strong></div>
         <form id="formVenta">
             <label for="formaPago">Forma de pago</label>
-            <select id="formaPago"><option>Efectivo</option><option value="Digital">Yape / Plin</option><option disabled="@Tienda.ClientesEnSql">Fiado</option></select>
-            @if (Tienda.ClientesEnSql)
+            <select id="formaPago"><option>Efectivo</option><option value="Digital">Yape / Plin</option><option disabled="@Tienda.FiadosPendientes">Fiado</option></select>
+            @if (Tienda.FiadosPendientes)
             {
                 <p class="muted">El registro de nuevos fiados está pendiente de completar la conexión de ventas.</p>
             }
@@ -34,7 +38,7 @@
                 <small>Verifica la recepción del pago antes de finalizar.</small>
             </div>
             <div id="campoFiado" hidden><label for="clienteFiado">Cliente</label><select id="clienteFiado"></select></div>
-            <button class="primary full" type="submit" disabled="@Tienda.ProductosEnSql" data-bloqueado="@Tienda.ProductosEnSql.ToString().ToLowerInvariant()">Finalizar venta</button>
+            <button class="primary full" type="submit" disabled="@Tienda.VentasPendientes" data-bloqueado="@Tienda.VentasPendientes.ToString().ToLowerInvariant()">Finalizar venta</button>
         </form>
         <p class="message" id="mensajeVenta" role="status"></p>
     </section>

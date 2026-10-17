@@ -12,13 +12,17 @@ public partial class TiendaService
     private readonly ProveedoresSqlService? proveedoresSql;
     private readonly ProductosSqlService? productosSql;
     private readonly ComprasSqlService? comprasSql;
+    private readonly VentasSqlService? ventasSql;
+    public bool VentasEnSql => ventasSql != null;
+    public bool VentasPendientes => ProductosEnSql && !VentasEnSql;
+    public bool FiadosPendientes => ClientesEnSql && !VentasEnSql;
     public bool ClientesEnSql => clientesSql != null;
     public bool ProveedoresEnSql => proveedoresSql != null;
     public bool ProductosEnSql => productosSql != null;
     public bool ComprasEnSql => comprasSql != null;
     public bool ComprasPendientes => ProductosEnSql && !ComprasEnSql;
     public const string StockPendiente = "El registro de nuevas ventas estará disponible al completar su conexión a la base de datos. Puedes consultar los productos, existencias y alternativas.";
-    public const string MovimientosPendientes = "El registro de nuevos fiados y abonos estará disponible al completar la conexión de ventas y pagos. Puedes consultar los saldos y pagos existentes.";
+    public const string MovimientosPendientes = "El registro de nuevos abonos estará disponible al completar su conexión a la base de datos. Puedes consultar los saldos y pagos existentes.";
     private readonly List<Producto> productos = new()
     {
         new() { Id = 1, Codigo = "P001", Nombre = "Arroz 1 kg", Precio = 4.50m, Stock = 18 },
@@ -40,12 +44,13 @@ public partial class TiendaService
 
     public TiendaService() : this(() => DateTimeOffset.UtcNow) { }
     public TiendaService(Func<DateTimeOffset> reloj) { this.reloj = reloj; }
-    public TiendaService(ClientesSqlService? clientesSql, ProveedoresSqlService? proveedoresSql = null, ProductosSqlService? productosSql = null, ComprasSqlService? comprasSql = null) : this()
+    public TiendaService(ClientesSqlService? clientesSql, ProveedoresSqlService? proveedoresSql = null, ProductosSqlService? productosSql = null, ComprasSqlService? comprasSql = null, VentasSqlService? ventasSql = null) : this()
     {
         this.clientesSql = clientesSql;
         this.proveedoresSql = proveedoresSql;
         this.productosSql = productosSql;
         this.comprasSql = comprasSql;
+        this.ventasSql = ventasSql;
     }
     private static T Copia<T>(T valor) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(valor))!;
     private static decimal Moneda(decimal valor) => decimal.Round(valor, 2, MidpointRounding.AwayFromZero);
@@ -144,10 +149,11 @@ public partial class TiendaService
         lock (bloqueo) { return Copia(compras.OrderByDescending(c => c.Id).ToList()); }
     }
 
-    public Venta RegistrarVenta(VentaSolicitud solicitud)
+    public Venta RegistrarVenta(VentaSolicitud solicitud, int? usuarioId = null)
     {
+        if (ventasSql != null) return ventasSql.RegistrarVenta(solicitud, usuarioId ?? 0);
         if (ProductosEnSql) throw new ArgumentException(StockPendiente);
-        if (ClientesEnSql && solicitud.FormaPago == "Fiado") throw new ArgumentException(MovimientosPendientes);
+        if (ClientesEnSql && solicitud.FormaPago == "Fiado") throw new ArgumentException("El registro de fiados requiere conectar ventas a la base de datos.");
         lock (bloqueo)
         {
             if (solicitud.Items == null || solicitud.Items.Count == 0 || solicitud.Items.Any(i => i == null || i.Cantidad <= 0))
@@ -177,7 +183,7 @@ public partial class TiendaService
                 throw new ArgumentException("Confirma el pago digital e ingresa su referencia.");
 
             // Se valida todo antes de descontar stock o modificar la deuda.
-            Venta venta = new() { Id = ventas.Count + 1, Fecha = reloj(), Detalles = detalles,
+            Venta venta = new() { Id = ventas.Count + 1, Fecha = reloj(), UsuarioId = usuarioId, Detalles = detalles,
                 FormaPago = solicitud.FormaPago, ClienteId = cliente?.Id, ClienteNombre = cliente?.Nombre,
                 ReferenciaPago = solicitud.FormaPago == "Digital" ? solicitud.ReferenciaPago!.Trim() : null,
                 Total = total, MontoRecibido = solicitud.FormaPago == "Efectivo" ? recibido : solicitud.FormaPago == "Digital" ? total : 0,
@@ -278,10 +284,12 @@ public partial class TiendaService
 
     public List<Venta> ConsultarVentas(DateOnly? desde, DateOnly? hasta)
     {
+        if (ventasSql != null) return ventasSql.ConsultarVentas(desde, hasta);
         lock (bloqueo) { ValidarPeriodo(desde, hasta); return Copia(ventas.Where(v => EnPeriodo(v.Fecha, desde, hasta)).OrderByDescending(v => v.Id).ToList()); }
     }
     public Venta ConsultarVenta(int id)
     {
+        if (ventasSql != null) return ventasSql.ConsultarVenta(id);
         lock (bloqueo) { return Copia(ventas.FirstOrDefault(v => v.Id == id) ?? throw new ArgumentException("La venta no existe.")); }
     }
     public ReporteVentas Reporte(DateOnly? desde, DateOnly? hasta)
@@ -289,13 +297,14 @@ public partial class TiendaService
         lock (bloqueo)
         {
             ValidarPeriodo(desde, hasta);
-            var filtradas = ventas.Where(v => EnPeriodo(v.Fecha, desde, hasta)).ToList();
+            var filtradas = ConsultarVentas(desde, hasta);
+            var pagosFiltrados = ConsultarPagos(null).Where(p => EnPeriodo(p.Fecha, desde, hasta)).ToList();
             return new ReporteVentas { Desde = desde, Hasta = hasta, Generado = reloj(), CantidadVentas = filtradas.Count, TotalVendido = filtradas.Sum(v => v.Total),
                 TotalFiado = filtradas.Where(v => v.FormaPago == "Fiado").Sum(v => v.Total),
                 CobradoEnVentas = filtradas.Where(v => v.FormaPago != "Fiado").Sum(v => v.Total),
-                Abonos = pagos.Where(p => EnPeriodo(p.Fecha, desde, hasta)).Sum(p => p.Monto),
+                Abonos = pagosFiltrados.Sum(p => p.Monto),
                 ProductosStockBajo = productosSql?.ContarStockBajo() ?? productos.Count(p => p.Activo && p.StockBajo), Ventas = Copia(filtradas.OrderByDescending(v => v.Id).ToList()),
-                Pagos = Copia(pagos.Where(p => EnPeriodo(p.Fecha, desde, hasta)).OrderByDescending(p => p.Id).ToList()) };
+                Pagos = Copia(pagosFiltrados.OrderByDescending(p => p.Id).ToList()) };
         }
     }
 }

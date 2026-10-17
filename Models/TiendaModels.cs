@@ -56,6 +56,8 @@ public class DetalleVenta
 
 public class Venta
 {
+    public int? UsuarioId { get; set; }
+    public string? UsuarioNombre { get; set; }
     public int Id { get; set; }
     public DateTimeOffset Fecha { get; set; }
     public List<DetalleVenta> Detalles { get; set; } = new();

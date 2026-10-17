@@ -354,4 +354,96 @@ finally
     SqlCompraPrueba($"DELETE FROM DetalleCompras WHERE IdCompra IN (SELECT IdCompra FROM Compras WHERE IdProveedor = {proveedorCompra.Id}); DELETE FROM Compras WHERE IdProveedor = {proveedorCompra.Id}; DELETE FROM Productos WHERE IdProducto IN ({productoA.Id}, {productoB.Id}, {productoLimite.Id}); DELETE FROM Proveedores WHERE IdProveedor = {proveedorCompra.Id}");
 }
 Verificar(tiendaCompras.ConsultarCompras().Count == 60 && tiendaCatalogo.BuscarProductos(null, true).Count == 120 && productosSql.ContarStockBajo() == 7, "Pruebas de compras dejan intacta la carga original.");
+
+// Ventas: precios del catalogo, inventario y fiados dentro de una transaccion.
+var ventasSql = new VentasSqlService(ConexionBD.Instancia);
+var tiendaVentas = new TiendaService(clientesSql, proveedoresSql, productosSql, comprasSql, ventasSql);
+Verificar(tiendaVentas.ConsultarVentas(null, null).Count == 931 && tiendaVentas.ConsultarVentas(null, null).All(v => v.UsuarioId > 0 && v.Detalles.Count > 0), "Historial SQL original de 931 ventas con detalles y usuario.");
+Verificar(tiendaVentas.ConsultarVentas(new(2026, 9, 17), new(2026, 10, 16)).Count == 931 && tiendaVentas.ConsultarVentas(new(2000, 1, 1), new(2000, 1, 1)).Count == 0, "Filtrado inclusivo de ventas originales por fecha de Lima.");
+Rechazar(() => tiendaVentas.ConsultarVentas(new(2026, 10, 17), new(2026, 10, 16)), "Periodo de ventas invertido rechazado.");
+Rechazar(() => tiendaVentas.ConsultarVenta(int.MaxValue), "Venta inexistente devuelve error controlado.");
+var clienteVenta = clientesSql.RegistrarCliente(new() { Documento = "99000100", Nombre = "Cliente venta SQL" });
+var articuloA = productosSql.RegistrarProducto(new() { Codigo = "QA_VENTA_A", Nombre = "Articulo venta A", Precio = 2.50m, StockInicial = 20 });
+var articuloB = productosSql.RegistrarProducto(new() { Codigo = "QA_VENTA_B", Nombre = "Articulo venta B", Precio = 1.25m, StockInicial = 20 });
+var articuloMax = productosSql.RegistrarProducto(new() { Codigo = "QA_VENTA_MAX", Nombre = "Articulo importe limite", Precio = VentasValidacion.ImporteMaximo, StockInicial = 2 });
+VentaSolicitud SolicitudVentaSql(string forma = "Fiado") => new() { FormaPago = forma, ClienteId = clienteVenta.Id, MontoRecibido = forma == "Efectivo" ? 10 : 0,
+    ReferenciaPago = "  OPERACION-SQL  ", Items = new() { new() { ProductoId = articuloB.Id, Cantidad = 2 }, new() { ProductoId = articuloA.Id, Cantidad = 1 }, new() { ProductoId = articuloA.Id, Cantidad = 1 } } };
+decimal DeudaVenta() => clientesSql.ConsultarClientes(true).Single(c => c.Id == clienteVenta.Id).Deuda;
+try
+{
+    Rechazar(() => tiendaVentas.RegistrarVenta(SolicitudVentaSql()), "Venta SQL requiere usuario autenticado.");
+    Rechazar(() => tiendaVentas.RegistrarVenta(SolicitudVentaSql(), int.MaxValue), "Usuario inexistente no registra ventas.");
+    Venta efectivo = tiendaVentas.RegistrarVenta(SolicitudVentaSql("Efectivo"), 1);
+    Verificar(efectivo.Total == 7.50m && efectivo.MontoRecibido == 10 && efectivo.Vuelto == 2.50m && efectivo.Detalles.Count == 2 && efectivo.Detalles.All(d => d.Cantidad == 2), "Efectivo agrupa productos repetidos, usa precio SQL y calcula vuelto exacto.");
+    Verificar(efectivo.ClienteId == null && efectivo.ReferenciaPago == null && efectivo.UsuarioId == 1 && DeudaVenta() == 0, "Efectivo ignora el cliente y referencia que no corresponden, sin generar deuda.");
+    Venta digital = tiendaVentas.RegistrarVenta(SolicitudVentaSql("Digital"), 2);
+    Verificar(digital.Total == 7.50m && digital.MontoRecibido == 7.50m && digital.Vuelto == 0 && digital.ReferenciaPago == "OPERACION-SQL" && digital.UsuarioId == 2, "Cajero registra pago digital con referencia normalizada y sin vuelto.");
+    Venta fiado = tiendaVentas.RegistrarVenta(SolicitudVentaSql(), 2);
+    Verificar(fiado.ClienteId == clienteVenta.Id && fiado.ClienteNombre == clienteVenta.Nombre && fiado.MontoRecibido == 0 && fiado.Vuelto == 0 && DeudaVenta() == 7.50m, "Fiado guarda cliente y aumenta su deuda mediante la vista SQL.");
+    Verificar(Ficha(articuloA.Id).Stock == 14 && Ficha(articuloB.Id).Stock == 14 && tiendaVentas.ConsultarPagos(clienteVenta.Id).Count == 0, "Tres modalidades descuentan stock una sola vez y no crean abonos.");
+    Verificar(JsonSerializer.Serialize(new VentasSqlService(ConexionBD.Instancia).ConsultarVenta(fiado.Id)) == JsonSerializer.Serialize(fiado), "Nueva instancia recupera fecha, usuario y detalles de la venta persistida.");
+    productosSql.EditarProducto(articuloA.Id, new() { Codigo = articuloA.Codigo, Nombre = "Articulo renombrado", Precio = 3.25m });
+    clientesSql.EditarCliente(clienteVenta.Id, new() { Documento = clienteVenta.Documento, Nombre = "Cliente renombrado" });
+    var historica = tiendaVentas.ConsultarVenta(fiado.Id);
+    Verificar(historica.ClienteNombre == "Cliente venta SQL" && historica.Detalles.Single(d => d.ProductoId == articuloA.Id).Nombre == "Articulo venta A" && historica.Detalles.Single(d => d.ProductoId == articuloA.Id).PrecioUnitario == 2.50m, "Editar catalogos conserva nombres y precios historicos de ventas.");
+    int antesVentas = tiendaVentas.ConsultarVentas(null, null).Count;
+    foreach (var invalida in new[]
+    {
+        new VentaSolicitud { FormaPago = "Fiado", ClienteId = clienteVenta.Id },
+        new VentaSolicitud { FormaPago = "Tarjeta", Items = SolicitudVentaSql().Items },
+        new VentaSolicitud { FormaPago = "Efectivo", MontoRecibido = 1, Items = SolicitudVentaSql().Items },
+        new VentaSolicitud { FormaPago = "Efectivo", MontoRecibido = -1, Items = SolicitudVentaSql().Items },
+        new VentaSolicitud { FormaPago = "Efectivo", MontoRecibido = decimal.MaxValue, Items = SolicitudVentaSql().Items },
+        new VentaSolicitud { FormaPago = "Digital", Items = SolicitudVentaSql().Items },
+        new VentaSolicitud { FormaPago = "Digital", ReferenciaPago = new string('x',101), Items = SolicitudVentaSql().Items },
+        new VentaSolicitud { FormaPago = "Fiado", Items = SolicitudVentaSql().Items },
+        new VentaSolicitud { FormaPago = "Fiado", ClienteId = int.MaxValue, Items = SolicitudVentaSql().Items },
+        new VentaSolicitud { FormaPago = "Fiado", ClienteId = clienteVenta.Id, Items = new() { new() { ProductoId = articuloA.Id, Cantidad = 1 }, new() { ProductoId = int.MaxValue, Cantidad = 1 } } },
+        new VentaSolicitud { FormaPago = "Fiado", ClienteId = clienteVenta.Id, Items = new() { new() { ProductoId = articuloA.Id, Cantidad = 0 } } },
+        new VentaSolicitud { FormaPago = "Fiado", ClienteId = clienteVenta.Id, Items = new() { new() { ProductoId = articuloA.Id, Cantidad = int.MaxValue }, new() { ProductoId = articuloA.Id, Cantidad = 1 } } },
+        new VentaSolicitud { FormaPago = "Fiado", ClienteId = clienteVenta.Id, Items = new() { new() { ProductoId = articuloMax.Id, Cantidad = 2 } } },
+        new VentaSolicitud { FormaPago = "Fiado", ClienteId = clienteVenta.Id, Items = new() { new() { ProductoId = articuloA.Id, Cantidad = 15 } } }
+    }) Rechazar(() => tiendaVentas.RegistrarVenta(invalida, 1), "Venta invalida rechazada sin persistencia parcial.");
+    productosSql.CambiarEstadoProducto(articuloB.Id, new() { Activo = false });
+    Rechazar(() => tiendaVentas.RegistrarVenta(SolicitudVentaSql(), 1), "Producto inactivo no se puede vender.");
+    productosSql.CambiarEstadoProducto(articuloB.Id, new() { Activo = true });
+    clientesSql.CambiarEstadoCliente(clienteVenta.Id, new() { Activo = false });
+    Rechazar(() => tiendaVentas.RegistrarVenta(SolicitudVentaSql(), 1), "Cliente inactivo no admite nuevos fiados.");
+    Verificar(tiendaVentas.ConsultarVenta(fiado.Id).ClienteNombre == "Cliente venta SQL", "Cliente inactivo conserva su historial de ventas.");
+    clientesSql.CambiarEstadoCliente(clienteVenta.Id, new() { Activo = true });
+    Verificar(tiendaVentas.ConsultarVentas(null, null).Count == antesVentas && Ficha(articuloA.Id).Stock == 14 && Ficha(articuloB.Id).Stock == 14 && DeudaVenta() == 7.50m, "Rechazos conservan ventas, stock y deuda anteriores.");
+    SqlCompraPrueba($"CREATE TRIGGER qa_Prueba_Venta_Atomicidad ON DetalleVentas AFTER INSERT AS BEGIN SET NOCOUNT ON; IF EXISTS (SELECT 1 FROM inserted WHERE IdProducto = {articuloB.Id}) BEGIN ;THROW 51091, N'Fallo controlado de prueba.', 1; END; END;");
+    bool falloVenta = false;
+    try { tiendaVentas.RegistrarVenta(SolicitudVentaSql(), 2); }
+    catch (SqlException error) when (error.Number == 51091) { falloVenta = true; }
+    finally { SqlCompraPrueba("DROP TRIGGER IF EXISTS qa_Prueba_Venta_Atomicidad"); }
+    Verificar(falloVenta && tiendaVentas.ConsultarVentas(null, null).Count == antesVentas && Ficha(articuloA.Id).Stock == 14 && Ficha(articuloB.Id).Stock == 14 && DeudaVenta() == 7.50m, "Fallo al guardar segundo detalle revierte venta, primer descuento y deuda.");
+    var simultaneas = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => Task.Run(() => new VentasSqlService(ConexionBD.Instancia).RegistrarVenta(SolicitudVentaSql(), 2))));
+    Verificar(simultaneas.Select(v => v.Id).Distinct().Count() == 2 && Ficha(articuloA.Id).Stock == 10 && Ficha(articuloB.Id).Stock == 10 && DeudaVenta() == 25.50m, "Fiados concurrentes conservan ambas ventas y calculan stock y deuda exactos.");
+    VentaSolicitud ultimaUnidad = new() { FormaPago = "Digital", ReferenciaPago = "ULTIMA", Items = new() { new() { ProductoId = articuloB.Id, Cantidad = 10 } } };
+    var escasez = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => Task.Run(() =>
+    {
+        try { ventasSql.RegistrarVenta(ultimaUnidad, 2); return true; } catch (ArgumentException) { return false; }
+    })));
+    Verificar(escasez.Count(x => x) == 1 && Ficha(articuloB.Id).Stock == 0, "Ventas concurrentes no venden dos veces las ultimas existencias.");
+    // Un ingreso y una venta del mismo producto tampoco pierden actualizaciones.
+    var ingreso = new CompraSolicitud { ProveedorId = 1, Items = new() { new() { ProductoId = articuloA.Id, Cantidad = 2, CostoUnitario = 1 } } };
+    var salida = new VentaSolicitud { FormaPago = "Digital", ReferenciaPago = "CRUCE", Items = new() { new() { ProductoId = articuloA.Id, Cantidad = 1 } } };
+    await Task.WhenAll(Task.Run(() => comprasSql.RegistrarCompra(ingreso, 1)), Task.Run(() => ventasSql.RegistrarVenta(salida, 2)));
+    Verificar(Ficha(articuloA.Id).Stock == 11, "Compra y venta simultaneas del mismo producto conservan todos los movimientos.");
+    DateOnly diaLima = DateOnly.FromDateTime(fiado.Fecha.ToOffset(TimeSpan.FromHours(-5)).Date);
+    var reporteVentas = tiendaVentas.Reporte(diaLima, diaLima);
+    Verificar(reporteVentas.CantidadVentas == 7 && reporteVentas.TotalVendido == 56.25m && reporteVentas.TotalFiado == 25.50m && reporteVentas.CobradoEnVentas == 30.75m, "Reporte consulta ventas SQL del dia, separa cobrado y fiado y suma exactamente sus detalles.");
+    Verificar(tiendaVentas.Reporte(new(2026,9,17),new(2026,10,16)).Pagos.Count == 124, "Reporte recupera tambien el historial existente de abonos SQL.");
+    Verificar(Escalar("SELECT COUNT(*) FROM Ventas v WHERE v.Total <> (SELECT SUM(d.Subtotal) FROM DetalleVentas d WHERE d.IdVenta = v.IdVenta)") == 0, "Toda venta confirmada coincide con sus detalles SQL.");
+    // 04:59 UTC pertenece aun al dia anterior en Lima; 05:00 inicia el siguiente.
+    SqlCompraPrueba($"UPDATE Ventas SET Fecha = '2001-01-02T04:59:59+00:00' WHERE IdVenta = {efectivo.Id}; UPDATE Ventas SET Fecha = '2001-01-02T05:00:00+00:00' WHERE IdVenta = {digital.Id}");
+    Verificar(ventasSql.ConsultarVentas(new(2001,1,1),new(2001,1,1)).Single().Id == efectivo.Id && ventasSql.ConsultarVentas(new(2001,1,2),new(2001,1,2)).Single().Id == digital.Id, "Fechas de Lima incluyen correctamente ambos lados de la medianoche.");
+}
+finally
+{
+    SqlCompraPrueba("DROP TRIGGER IF EXISTS qa_Prueba_Venta_Atomicidad");
+    SqlCompraPrueba($"DECLARE @ventas TABLE (Id int); INSERT INTO @ventas SELECT DISTINCT IdVenta FROM DetalleVentas WHERE IdProducto IN ({articuloA.Id},{articuloB.Id},{articuloMax.Id}); DELETE FROM DetalleVentas WHERE IdVenta IN (SELECT Id FROM @ventas); DELETE FROM Ventas WHERE IdVenta IN (SELECT Id FROM @ventas); DECLARE @compras TABLE (Id int); INSERT INTO @compras SELECT DISTINCT IdCompra FROM DetalleCompras WHERE IdProducto={articuloA.Id}; DELETE FROM DetalleCompras WHERE IdCompra IN (SELECT Id FROM @compras); DELETE FROM Compras WHERE IdCompra IN (SELECT Id FROM @compras); DELETE FROM Productos WHERE IdProducto IN ({articuloA.Id},{articuloB.Id},{articuloMax.Id}); DELETE FROM Clientes WHERE IdCliente={clienteVenta.Id}");
+}
+Verificar(ventasSql.ConsultarVentas(null,null).Count == 931 && tiendaCompras.ConsultarCompras().Count == 60 && tiendaCatalogo.BuscarProductos(null,true).Count == 120, "Pruebas de ventas dejan intactos los movimientos y catalogos originales.");
 Console.WriteLine($"{comprobaciones} comprobaciones SQL correctas.");

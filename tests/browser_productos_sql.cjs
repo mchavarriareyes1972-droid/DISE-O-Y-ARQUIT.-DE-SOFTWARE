@@ -80,7 +80,7 @@ const fs = require('node:fs');
         assert(detalle.includes('Sustituto UI disponible') && !detalle.includes('Sustituto HTTP agotado'));
         await page.locator('#contenidoDetalle').getByRole('button', { name: 'Agregar', exact: true }).click();
         assert((await page.locator('#detalleVenta').innerText()).includes('Sustituto UI disponible'));
-        assert(await page.locator('#formVenta button[type=submit]').isDisabled());
+        assert(await page.locator('#formVenta button[type=submit]').isEnabled());
         await page.goto(base + '/Home/Compras');
         assert(await page.locator('#formCompra button[type=submit]').isDisabled());
 

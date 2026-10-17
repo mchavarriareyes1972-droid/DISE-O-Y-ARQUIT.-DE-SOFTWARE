@@ -55,7 +55,12 @@ public class TiendaController : ControllerBase
         }
         catch (ArgumentException error) { return BadRequest(new { mensaje = error.Message }); }
     }
-    [HttpPost("ventas"), ValidateAntiForgeryToken] public IActionResult Venta(VentaSolicitud solicitud) => Operacion(() => tienda.RegistrarVenta(solicitud));
+    [HttpPost("ventas"), ValidateAntiForgeryToken]
+    public IActionResult Venta(VentaSolicitud solicitud)
+    {
+        if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int usuarioId) || usuarioId <= 0) return Unauthorized();
+        return Operacion(() => tienda.RegistrarVenta(solicitud, usuarioId));
+    }
     [HttpPost("pagos"), ValidateAntiForgeryToken] public IActionResult Pago(PagoSolicitud solicitud) => Operacion(() => tienda.RegistrarPago(solicitud));
     [Authorize(Roles = Roles.Administrador), HttpPost("compras"), ValidateAntiForgeryToken]
     public IActionResult Compra(CompraSolicitud solicitud)

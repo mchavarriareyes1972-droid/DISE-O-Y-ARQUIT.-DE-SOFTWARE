@@ -13,11 +13,14 @@ string persistenciaClientes = builder.Configuration["Persistencia:Clientes"] ?? 
 string persistenciaProveedores = builder.Configuration["Persistencia:Proveedores"] ?? "SqlServer";
 string persistenciaProductos = builder.Configuration["Persistencia:Productos"] ?? "SqlServer";
 string persistenciaCompras = builder.Configuration["Persistencia:Compras"] ?? "SqlServer";
-var modos = new[] { persistenciaUsuarios, persistenciaClientes, persistenciaProveedores, persistenciaProductos, persistenciaCompras };
+string persistenciaVentas = builder.Configuration["Persistencia:Ventas"] ?? "SqlServer";
+var modos = new[] { persistenciaUsuarios, persistenciaClientes, persistenciaProveedores, persistenciaProductos, persistenciaCompras, persistenciaVentas };
 if (modos.Any(modo => modo is not ("SqlServer" or "Memoria")))
-    throw new InvalidOperationException("Persistencia:Usuarios, Clientes, Proveedores, Productos y Compras deben ser SqlServer o Memoria.");
+    throw new InvalidOperationException("Persistencia:Usuarios, Clientes, Proveedores, Productos, Compras y Ventas deben ser SqlServer o Memoria.");
 if (persistenciaCompras == "SqlServer" && new[] { persistenciaUsuarios, persistenciaProveedores, persistenciaProductos }.Any(m => m != "SqlServer"))
     throw new InvalidOperationException("Compras en SqlServer requiere Usuarios, Proveedores y Productos en SqlServer.");
+if (persistenciaVentas == "SqlServer" && new[] { persistenciaUsuarios, persistenciaClientes, persistenciaProductos }.Any(m => m != "SqlServer"))
+    throw new InvalidOperationException("Ventas en SqlServer requiere Usuarios, Clientes y Productos en SqlServer.");
 if (modos.Contains("SqlServer"))
 {
     ConexionBD.Instancia.Configurar(builder.Configuration.GetConnectionString("BodegaGiovanna") ?? "");
@@ -35,7 +38,9 @@ if (persistenciaProductos == "SqlServer")
     builder.Services.AddSingleton<ProductosSqlService>();
 if (persistenciaCompras == "SqlServer")
     builder.Services.AddSingleton<ComprasSqlService>();
-builder.Services.AddSingleton(sp => new TiendaService(sp.GetService<ClientesSqlService>(), sp.GetService<ProveedoresSqlService>(), sp.GetService<ProductosSqlService>(), sp.GetService<ComprasSqlService>()));
+if (persistenciaVentas == "SqlServer")
+    builder.Services.AddSingleton<VentasSqlService>();
+builder.Services.AddSingleton(sp => new TiendaService(sp.GetService<ClientesSqlService>(), sp.GetService<ProveedoresSqlService>(), sp.GetService<ProductosSqlService>(), sp.GetService<ComprasSqlService>(), sp.GetService<VentasSqlService>()));
 builder.Services.AddSingleton<ExportacionService>();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(opciones =>
 {

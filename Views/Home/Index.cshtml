@@ -18,7 +18,7 @@
   <div class="notice">
     @if (Tienda.ClientesEnSql)
     {
-      <p>Los clientes, sus deudas y su historial de pagos se consultan desde la base de datos. Los cambios de clientes se conservan al cerrar el programa. El registro de nuevos fiados y abonos estará disponible al completar su conexión.</p>
+      <p>Los clientes, sus deudas y su historial de pagos se consultan desde la base de datos. Los cambios de clientes se conservan al cerrar el programa. @Tienda_Giovanna.Services.TiendaService.MovimientosPendientes</p>
     }
     @if (Tienda.ProveedoresEnSql)
     {
@@ -27,8 +27,14 @@
     @if (Tienda.ProductosEnSql)
     {
       <p>El inventario, el stock mínimo y las alternativas se guardan en la base de datos. Puedes consultar las existencias y las alertas de reposición.</p>
-      <p>@Tienda_Giovanna.Services.TiendaService.StockPendiente</p>
-      <p>Los reportes de ventas y abonos todavía no muestran los movimientos de la base de datos.</p>
+      @if (Tienda.VentasPendientes)
+      {
+        <p>@Tienda_Giovanna.Services.TiendaService.StockPendiente</p>
+      }
+    }
+    @if (Tienda.VentasEnSql)
+    {
+      <p>Las ventas se guardan con sus detalles y el usuario que las registra, descuentan stock y actualizan la deuda de los fiados. En Reportes puedes consultar el historial y los abonos existentes por fecha.</p>
     }
     @if (Tienda.ComprasEnSql)
     {

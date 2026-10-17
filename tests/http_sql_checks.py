@@ -107,7 +107,7 @@ else:
     api(ruta + '/estado', {'activo': True}, conexion=caja, esperado=403)
     verificar(len(api('clientes?incluirInactivos=true', conexion=caja)) == 61, 'El cajero puede consultar clientes SQL sin administrarlos.')
     api('pagos', {'clienteId': clientes[0]['id'], 'monto': 1, 'metodo': 'Efectivo'}, esperado=400)
-    api('ventas', {'formaPago': 'Fiado', 'clienteId': clientes[0]['id'], 'items': [{'productoId': 1, 'cantidad': 1}]}, esperado=400)
+    api('ventas', {'formaPago': 'Fiado', 'clienteId': cliente['id'], 'items': [{'productoId': 1, 'cantidad': 1}]}, esperado=400)
     verificar(len(api('pagos')) == 124, 'Las operaciones pendientes no generan pagos de practica ni modifican el historial SQL.')
 
 datos_proveedor = {'ruc': '20990000011', 'razonSocial': 'Proveedor HTTP SQL', 'contacto': 'Contacto',
@@ -202,14 +202,14 @@ else:
     api('alternativas', {'productoId': producto['id'], 'alternativosIds': []}, conexion=caja, esperado=403)
     for forma in ['Efectivo', 'Digital', 'Fiado']:
         api('ventas', {'formaPago': forma, 'montoRecibido': 100, 'referenciaPago': 'PRUEBA', 'clienteId': 1,
-            'items': [{'productoId': sustituto['id'], 'cantidad': 1}]}, esperado=400)
-    verificar(api(f"productos/{sustituto['id']}")['producto']['stock'] == 10 and len(api('compras')) == 60 and not api('ventas'), 'Las ventas pendientes no cambian stock ni el historial de compras SQL.')
+            'items': [{'productoId': sustituto['id'], 'cantidad': 2147483647}]}, esperado=400)
+    verificar(api(f"productos/{sustituto['id']}")['producto']['stock'] == 10 and len(api('compras')) == 60 and len(api('ventas')) == 931, 'Las ventas rechazadas no cambian stock ni historiales SQL.')
 
 if '--verificar-reinicio' in sys.argv:
     compras = api('compras')
     compra = next(c for c in compras if any(d['codigo'] == 'QA_HTTP_02' for d in c['detalles']))
     verificar(len(compras) == 61 and compra['total'] == 5 and compra['usuarioId'] == 1, 'La compra y el usuario se conservan al reiniciar el servidor.')
-    verificar(api(f"compras/{compra['id']}")['detalles'][0]['cantidad'] == 2 and api('productos?busqueda=QA_HTTP_02')[0]['stock'] == 12, 'Detalle y stock repuesto se recuperan despues del reinicio.')
+    verificar(api(f"compras/{compra['id']}")['detalles'][0]['cantidad'] == 2 and api('productos?busqueda=QA_HTTP_02')[0]['stock'] == 9, 'Detalle de compra y stock despues de ventas se recuperan tras el reinicio.')
 else:
     compras = api('compras')
     verificar(len(compras) == 60 and all(c['detalles'] and c['usuarioId'] for c in compras), 'La API consulta compras, detalles y usuarios de la carga original.')
@@ -240,4 +240,54 @@ else:
     api('compras', compra_datos, esperado=400)
     api(f"productos/{producto_compra['id']}/estado", {'activo': True})
     verificar(len(api('compras')) == 61 and api('productos?busqueda=QA_HTTP_02')[0]['stock'] == 12, 'Compras rechazadas conservan cabeceras y stock confirmados.')
+# Ventas: comprobar la sesion real, los tres pagos y la persistencia tras reiniciar.
+producto_venta = api('productos?busqueda=QA_HTTP_02')[0]
+if '--verificar-reinicio' in sys.argv:
+    ventas = api('ventas')
+    nuevas = [v for v in ventas if any(d['codigo'] == 'QA_HTTP_02' for d in v['detalles'])]
+    verificar(len(ventas) == 934 and len(nuevas) == 3 and {v['formaPago'] for v in nuevas} == {'Efectivo', 'Digital', 'Fiado'}, 'Las tres formas de pago y sus detalles permanecen despues del reinicio.')
+    verificar(producto_venta['stock'] == 9 and all(v['total'] == 6.5 for v in nuevas), 'El stock y los totales de las ventas permanecen en SQL.')
+    fiado = next(v for v in nuevas if v['formaPago'] == 'Fiado')
+    verificar(api(f"ventas/{fiado['id']}")['clienteNombre'] and fiado['usuarioId'] == 2, 'Cliente fiado y cajero se recuperan de la venta persistida.')
+else:
+    pagina_ventas = html.unescape(admin.open(base + '/Home/Ventas').read().decode())
+    verificar('data-bloqueado="false"' in pagina_ventas and 'descuento de stock' in pagina_ventas, 'La pantalla habilita finalizar ventas y explica su guardado en SQL.')
+    ventas = api('ventas')
+    verificar(len(ventas) == 931 and all(v['detalles'] and v['usuarioId'] for v in ventas), 'Historial original SQL con sus 931 ventas, detalles y usuarios.')
+    cliente_fiado = api('clientes')[0]
+    cuerpo = {'items': [{'productoId': producto_venta['id'], 'cantidad': 1, 'precioUnitario': .01, 'subtotal': .01}],
+        'formaPago': 'Efectivo', 'montoRecibido': 10, 'total': .01, 'vuelto': 999, 'usuarioId': 2, 'fecha': '2000-01-01'}
+    efectivo = api('ventas', cuerpo)
+    verificar(efectivo['total'] == 6.5 and efectivo['vuelto'] == 3.5 and efectivo['usuarioId'] == 1 and not efectivo['fecha'].startswith('2000'), 'La venta usa precio del catalogo, usuario autenticado y fecha del servidor; no acepta totales falsificados.')
+    csrf_admin = csrf
+    csrf = token(caja.open(base + '/Home/Ventas').read().decode())
+    digital = api('ventas', {**cuerpo, 'formaPago': 'Digital', 'referenciaPago': "  OP-O'Connor  ", 'montoRecibido': 0}, conexion=caja)
+    fiado = api('ventas', {**cuerpo, 'formaPago': 'Fiado', 'clienteId': cliente_fiado['id'], 'montoRecibido': 0}, conexion=caja)
+    csrf = csrf_admin
+    verificar(digital['referenciaPago'] == "OP-O'Connor" and digital['montoRecibido'] == 6.5 and digital['vuelto'] == 0 and digital['usuarioId'] == 2, 'Cajero registra pago digital y su referencia como datos.')
+    verificar(fiado['clienteNombre'] == cliente_fiado['nombre'] and fiado['montoRecibido'] == 0 and fiado['vuelto'] == 0 and fiado['usuarioId'] == 2, 'Cajero registra fiado con cliente real sin simular dinero recibido.')
+    verificar(next(c for c in api('clientes') if c['id'] == cliente_fiado['id'])['deuda'] == cliente_fiado['deuda'] + 6.5, 'La deuda visible del cliente aumenta exactamente por el fiado confirmado.')
+    api('ventas/2147483647', esperado=400)
+    api('ventas?desde=2026-10-17&hasta=2026-10-16', esperado=400)
+    api('ventas', cuerpo, esperado=400, con_token=False)
+    for invalida in [
+        {**cuerpo, 'items': []},
+        {**cuerpo, 'items': [None]},
+        {**cuerpo, 'items': [{'productoId': producto_venta['id'], 'cantidad': 2147483647}]},
+        {**cuerpo, 'items': [{'productoId': producto_venta['id'], 'cantidad': 1}, {'productoId': 2147483647, 'cantidad': 1}]},
+        {**cuerpo, 'montoRecibido': 1},
+        {**cuerpo, 'formaPago': 'Digital', 'referenciaPago': ' '},
+        {**cuerpo, 'formaPago': 'Digital', 'referenciaPago': 'x' * 101},
+        {**cuerpo, 'formaPago': 'Fiado', 'clienteId': 2147483647},
+        {**cuerpo, 'formaPago': 'Tarjeta'},
+        {**cuerpo, 'montoRecibido': -1},
+        {**cuerpo, 'montoRecibido': 10000000000000000}
+    ]: api('ventas', invalida, esperado=400)
+    verificar(len(api('ventas')) == 934 and api('productos?busqueda=QA_HTTP_02')[0]['stock'] == 9 and len(api('pagos')) == 124, 'Ventas invalidas no alteran el stock, las ventas confirmadas ni los abonos.')
+    reporte = api('reporte')
+    verificar(reporte['cantidadVentas'] == 934 and reporte['totalVendido'] == round(sum(v['total'] for v in reporte['ventas']), 2), 'Reporte muestra todas las ventas SQL y suma sus importes.')
+    verificar(len(reporte['pagos']) == 124 and reporte['abonos'] > 0, 'El reporte incluye los abonos historicos de la misma base.')
+    for formato, prefijo in [('csv', bytes([239,187,191])), ('pdf', b'%PDF')]:
+        archivo = admin.open(base + '/api/tienda/reporte/exportar/' + formato).read()
+        verificar(archivo.startswith(prefijo), 'Exportacion ' + formato + ' funciona con el historial SQL.')
 print(f'{comprobaciones} comprobaciones HTTP con SQL correctas.')

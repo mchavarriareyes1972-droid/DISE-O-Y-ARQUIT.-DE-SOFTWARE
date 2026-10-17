@@ -355,7 +355,8 @@ async function iniciarClientes() {
 async function detalleVenta(id) {
     try {
         const venta = await api('ventas/' + id);
-        const contenido = [elemento('p', `${fecha(venta.fecha)} · ${venta.formaPago} · ${venta.clienteNombre || 'Venta al contado'}`)];
+        const contenido = [elemento('p', `${fecha(venta.fecha)} · ${venta.formaPago} · ${venta.clienteNombre || 'Venta al contado'}`),
+            elemento('p', 'Registrada por: ' + (venta.usuarioNombre || 'Práctica'))];
         const listado = document.createElement('ul');
         venta.detalles.forEach(d => listado.append(elemento('li', `${d.codigo} · ${d.nombre} × ${d.cantidad} · ${dinero(d.precioUnitario)} c/u · Subtotal: ${dinero(d.subtotal)}`)));
         contenido.push(listado, elemento('p', `Total: ${dinero(venta.total)} · Recibido: ${dinero(venta.montoRecibido)} · Vuelto: ${dinero(venta.vuelto)}`));
@@ -374,7 +375,7 @@ async function renderReporte() {
     $('reporteFiado').textContent = dinero(reporte.totalFiado);
     $('reporteAbonos').textContent = dinero(reporte.abonos);
     $('reporteStockBajo').textContent = reporte.productosStockBajo;
-    tabla('tablaVentas', reporte.ventas, 6, v => [v.id, fecha(v.fecha), v.clienteNombre || 'Contado', v.formaPago, dinero(v.total), boton('Ver detalle', () => detalleVenta(v.id))]);
+    tabla('tablaVentas', reporte.ventas, 7, v => [v.id, fecha(v.fecha), v.clienteNombre || 'Contado', v.formaPago, v.usuarioNombre || 'Práctica', dinero(v.total), boton('Ver detalle', () => detalleVenta(v.id))]);
     mensaje('mensajeReportes', reporte.cantidadVentas + ' venta(s) en el periodo consultado.');
 }
 async function iniciarReportes() {
