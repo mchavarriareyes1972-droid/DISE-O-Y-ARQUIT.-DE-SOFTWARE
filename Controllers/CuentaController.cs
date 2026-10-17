@@ -11,8 +11,9 @@ namespace Tienda_Giovanna.Controllers;
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public class CuentaController : Controller
 {
-    private readonly UsuariosService usuarios;
-    public CuentaController(UsuariosService usuarios) { this.usuarios = usuarios; }
+    private readonly IUsuariosService usuarios;
+    private readonly ILogger<CuentaController> logger;
+    public CuentaController(IUsuariosService usuarios, ILogger<CuentaController> logger) { this.usuarios = usuarios; this.logger = logger; }
     [AllowAnonymous, HttpGet]
     public IActionResult Login(string? returnUrl)
     {
@@ -23,7 +24,15 @@ public class CuentaController : Controller
     public async Task<IActionResult> Login(LoginSolicitud solicitud)
     {
         if (!ModelState.IsValid) return View(solicitud);
-        var sesion = usuarios.Autenticar(solicitud.Login, solicitud.Password);
+        (UsuarioResumen Usuario, int Version)? sesion;
+        try { sesion = usuarios.Autenticar(solicitud.Login, solicitud.Password); }
+        catch (Microsoft.Data.SqlClient.SqlException error)
+        {
+            logger.LogError(error, "No se pudo consultar la base de datos al iniciar sesion.");
+            Response.StatusCode = 503;
+            ModelState.AddModelError("", "No se pudo conectar con la base de datos. Comprueba que SQL Server este iniciado y vuelve a intentar.");
+            return View(solicitud);
+        }
         if (!sesion.HasValue)
         {
             ModelState.AddModelError("", "No se pudo iniciar sesión. Revisa tus datos; después de varios intentos fallidos espera cinco minutos.");

@@ -9,8 +9,8 @@ namespace Tienda_Giovanna.Controllers;
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public class UsuariosController : ControllerBase
 {
-    private readonly UsuariosService usuarios;
-    public UsuariosController(UsuariosService usuarios) { this.usuarios = usuarios; }
+    private readonly IUsuariosService usuarios;
+    public UsuariosController(IUsuariosService usuarios) { this.usuarios = usuarios; }
     [HttpGet] public IActionResult Lista() => Ok(usuarios.ConsultarUsuarios());
     [HttpPost, ValidateAntiForgeryToken]
     public IActionResult Registrar(RegistroUsuarioSolicitud solicitud)
