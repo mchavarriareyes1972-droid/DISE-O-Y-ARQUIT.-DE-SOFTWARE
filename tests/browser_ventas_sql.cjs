@@ -53,7 +53,7 @@ const fs = require('node:fs');
         await page.goto(base + '/Home/Clientes');
         const cliente = page.locator('#tablaClientes tr').filter({ hasText: fiado.clienteNombre });
         await cliente.waitFor(); assert((await cliente.innerText()).replace(/\s/g, '').includes(new Intl.NumberFormat('es-PE', { style: 'currency', currency: 'PEN' }).format(await saldo(clienteId)).replace(/\s/g, '')));
-        assert(await page.locator('#formPago button[type=submit]').isDisabled());
+        assert(await page.locator('#formPago button[type=submit]').isEnabled());
         await page.goto(base + '/Home/Reportes'); await texto('reporteCantidad', '937');
         const ultima = page.locator('#tablaVentas tr').first();
         await ultima.getByRole('button', { name: 'Ver detalle', exact: true }).click();

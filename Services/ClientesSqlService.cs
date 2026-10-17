@@ -79,20 +79,10 @@ public sealed class ClientesSqlService
         "UPDATE Clientes SET Activo = @activo OUTPUT INSERTED.IdCliente WHERE IdCliente = @id",
         id: id, activo: solicitud.Activo ?? throw new ArgumentException("Indica el estado del cliente."));
 
-    // Solo consulta: el registro de nuevos movimientos se migrara con ventas y abonos.
+    // Mantiene la consulta historica disponible aunque solo Clientes use SQL.
     public List<Pago> ConsultarPagos(int? clienteId)
     {
         using var c = conexion.CrearConexion(); c.Open();
-        using var cmd = new SqlCommand("SELECT IdPago, IdCliente, ClienteNombre, Fecha, Monto, Metodo, SaldoRestante FROM Pagos WHERE @cliente IS NULL OR IdCliente = @cliente ORDER BY IdPago DESC", c);
-        cmd.Parameters.Add("@cliente", SqlDbType.Int).Value = (object?)clienteId ?? DBNull.Value;
-        using var lector = cmd.ExecuteReader();
-        var pagos = new List<Pago>();
-        while (lector.Read()) pagos.Add(new()
-        {
-            Id = lector.GetInt32(0), ClienteId = lector.GetInt32(1), ClienteNombre = lector.GetString(2),
-            Fecha = lector.GetFieldValue<DateTimeOffset>(3), Monto = lector.GetDecimal(4),
-            Metodo = lector.GetString(5), SaldoRestante = lector.GetDecimal(6)
-        });
-        return pagos;
+        return PagosSqlService.Consultar(c, null, clienteId);
     }
 }

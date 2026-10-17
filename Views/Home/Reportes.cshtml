@@ -3,11 +3,19 @@
 <div class="page-heading"><div><p class="eyebrow">VENTAS Y REPORTES</p><h1>Historial de ventas</h1><p>Consulta un periodo y revisa el detalle de cada venta.</p></div></div>
 @if (Tienda.VentasEnSql)
 {
-    <p class="notice">El historial, los detalles y los totales de ventas se consultan desde la base de datos. Los abonos existentes y el stock bajo también se consultan en SQL Server. El registro de nuevos abonos sigue pendiente.</p>
+    <p class="notice">El historial, los detalles y los totales de ventas se consultan desde la base de datos. Los abonos existentes y el stock bajo también se consultan en SQL Server.</p>
 }
 else if (Tienda.ProductosEnSql)
 {
     <p class="notice">La alerta de stock bajo consulta las existencias actuales de la base de datos. Los indicadores e historial de ventas y abonos todavía están pendientes de conexión y no muestran los movimientos cargados en SQL Server.</p>
+}
+@if (Tienda.PagosEnSql)
+{
+    <p class="muted">Los nuevos abonos también se incluyen en los totales y descargas del periodo.</p>
+}
+else if (Tienda.PagosPendientes)
+{
+    <p class="muted">El registro de nuevos abonos sigue pendiente de conexión.</p>
 }
 <section class="card">
     <form id="formPeriodo"><div class="form-grid"><div><label for="fechaDesde">Desde</label><input id="fechaDesde" type="date" /></div><div><label for="fechaHasta">Hasta</label><input id="fechaHasta" type="date" /></div></div><div class="button-row"><button type="submit" class="primary">Consultar periodo</button><button type="button" id="limpiarPeriodo">Ver todas</button></div></form>

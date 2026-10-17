@@ -14,6 +14,7 @@ jobs:
       Persistencia__Productos: Memoria
       Persistencia__Compras: Memoria
       Persistencia__Ventas: Memoria
+      Persistencia__Pagos: Memoria
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

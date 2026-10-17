@@ -18,7 +18,15 @@
   <div class="notice">
     @if (Tienda.ClientesEnSql)
     {
-      <p>Los clientes, sus deudas y su historial de pagos se consultan desde la base de datos. Los cambios de clientes se conservan al cerrar el programa. @Tienda_Giovanna.Services.TiendaService.MovimientosPendientes</p>
+      <p>Los clientes, sus deudas y su historial de pagos se consultan desde la base de datos. Los cambios de clientes se conservan al cerrar el programa.</p>
+    }
+    @if (Tienda.PagosEnSql)
+    {
+      <p>Los abonos parciales o totales reducen la deuda y se guardan con fecha, usuario y saldo restante. Puedes consultarlos en Clientes y fiados y en los reportes por fecha.</p>
+    }
+    else if (Tienda.PagosPendientes)
+    {
+      <p>@Tienda_Giovanna.Services.TiendaService.MovimientosPendientes</p>
     }
     @if (Tienda.ProveedoresEnSql)
     {

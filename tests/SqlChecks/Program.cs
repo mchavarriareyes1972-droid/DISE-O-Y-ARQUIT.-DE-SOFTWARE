@@ -446,4 +446,90 @@ finally
     SqlCompraPrueba($"DECLARE @ventas TABLE (Id int); INSERT INTO @ventas SELECT DISTINCT IdVenta FROM DetalleVentas WHERE IdProducto IN ({articuloA.Id},{articuloB.Id},{articuloMax.Id}); DELETE FROM DetalleVentas WHERE IdVenta IN (SELECT Id FROM @ventas); DELETE FROM Ventas WHERE IdVenta IN (SELECT Id FROM @ventas); DECLARE @compras TABLE (Id int); INSERT INTO @compras SELECT DISTINCT IdCompra FROM DetalleCompras WHERE IdProducto={articuloA.Id}; DELETE FROM DetalleCompras WHERE IdCompra IN (SELECT Id FROM @compras); DELETE FROM Compras WHERE IdCompra IN (SELECT Id FROM @compras); DELETE FROM Productos WHERE IdProducto IN ({articuloA.Id},{articuloB.Id},{articuloMax.Id}); DELETE FROM Clientes WHERE IdCliente={clienteVenta.Id}");
 }
 Verificar(ventasSql.ConsultarVentas(null,null).Count == 931 && tiendaCompras.ConsultarCompras().Count == 60 && tiendaCatalogo.BuscarProductos(null,true).Count == 120, "Pruebas de ventas dejan intactos los movimientos y catalogos originales.");
+
+// Abonos: la fila del cliente coordina pagos y ventas al fiado concurrentes.
+var pagosSql = new PagosSqlService(ConexionBD.Instancia);
+var tiendaPagos = new TiendaService(clientesSql, proveedoresSql, productosSql, comprasSql, ventasSql, pagosSql);
+Verificar(tiendaPagos.ConsultarPagos(null).Count == 124 && tiendaPagos.ConsultarPagos(null).All(p => p.UsuarioId > 0 && !string.IsNullOrWhiteSpace(p.UsuarioNombre)), "Historial original de 124 abonos con su usuario SQL.");
+var clienteAbono = clientesSql.RegistrarCliente(new() { Documento = "99000200", Nombre = "Cliente abonos SQL" });
+var clienteOtroAbono = clientesSql.RegistrarCliente(new() { Documento = "99000201", Nombre = "Otro cliente abonos SQL" });
+var articuloAbono = productosSql.RegistrarProducto(new() { Codigo = "QA_ABONO", Nombre = "Articulo fiado para abonos", Precio = 10, StockInicial = 20 });
+var usuarioAbono = usuarios.RegistrarUsuario(new() { Nombre = "Operador abonos QA", Login = "qa_abonos", Rol = Roles.Cajero, Password = clavePrueba });
+Venta NuevoFiadoAbono(int cantidad = 1) => ventasSql.RegistrarVenta(new() { FormaPago = "Fiado", ClienteId = clienteAbono.Id, Items = new() { new() { ProductoId = articuloAbono.Id, Cantidad = cantidad } } }, 2);
+PagoSolicitud SolicitudAbono(decimal monto = 10, string metodo = "Efectivo") => new() { ClienteId = clienteAbono.Id, Monto = monto, Metodo = metodo };
+decimal DeudaAbono() => clientesSql.ConsultarClientes(true).Single(c => c.Id == clienteAbono.Id).Deuda;
+try
+{
+    NuevoFiadoAbono(3);
+    Rechazar(() => tiendaPagos.RegistrarPago(SolicitudAbono()), "Abono SQL requiere usuario autenticado.");
+    Rechazar(() => tiendaPagos.RegistrarPago(SolicitudAbono(), int.MaxValue), "Usuario inexistente no registra abonos.");
+    usuarios.EditarUsuario(usuarioAbono.Id, new() { Nombre = usuarioAbono.Nombre, Login = usuarioAbono.Login, Rol = Roles.Cajero, Activo = false });
+    Rechazar(() => tiendaPagos.RegistrarPago(SolicitudAbono(), usuarioAbono.Id), "Usuario inactivo no registra abonos aunque invoque el servicio directamente.");
+    var efectivoAbono = tiendaPagos.RegistrarPago(SolicitudAbono(), 1);
+    Verificar(efectivoAbono.Monto == 10 && efectivoAbono.SaldoRestante == 20 && DeudaAbono() == 20 && efectivoAbono.UsuarioId == 1 && efectivoAbono.Metodo == "Efectivo", "Abono efectivo: deuda de 30 menos pago de 10 deja 20 y guarda administrador.");
+    var digitalAbono = tiendaPagos.RegistrarPago(SolicitudAbono(1.235m, "Digital"), 2);
+    Verificar(digitalAbono.Monto == 1.24m && digitalAbono.SaldoRestante == 18.76m && DeudaAbono() == 18.76m && digitalAbono.UsuarioId == 2, "Cajero registra abono digital con redondeo monetario exacto.");
+    Verificar(digitalAbono.Fecha >= DateTimeOffset.UtcNow.AddMinutes(-1) && digitalAbono.Fecha <= DateTimeOffset.UtcNow.AddSeconds(2), "Fecha del abono asignada por SQL al registrar.");
+    Verificar(JsonSerializer.Serialize(new PagosSqlService(ConexionBD.Instancia).ConsultarPagos(clienteAbono.Id).First()) == JsonSerializer.Serialize(digitalAbono), "Nueva instancia recupera abono, usuario y saldo restante persistidos.");
+    clientesSql.EditarCliente(clienteAbono.Id, new() { Documento = clienteAbono.Documento, Nombre = "Cliente abonos renombrado" });
+    Verificar(tiendaPagos.ConsultarPagos(clienteAbono.Id).All(p => p.ClienteNombre == "Cliente abonos SQL"), "Editar el cliente conserva su nombre historico en los abonos.");
+    foreach (var invalido in new[]
+    {
+        SolicitudAbono(0), SolicitudAbono(-1), SolicitudAbono(.001m), SolicitudAbono(18.77m),
+        SolicitudAbono(decimal.MaxValue), SolicitudAbono(1, "Fiado"), SolicitudAbono(1, "Tarjeta"),
+        new PagoSolicitud { ClienteId = 0, Monto = 1, Metodo = "Efectivo" },
+        new PagoSolicitud { ClienteId = int.MaxValue, Monto = 1, Metodo = "Efectivo" }
+    }) Rechazar(() => tiendaPagos.RegistrarPago(invalido, 1), "Abono invalido rechazado sin modificar la deuda.");
+    Verificar(tiendaPagos.ConsultarPagos(clienteAbono.Id).Count == 2 && DeudaAbono() == 18.76m && Ficha(articuloAbono.Id).Stock == 17, "Pagos rechazados conservan historial, deuda e inventario.");
+    SqlCompraPrueba($"CREATE TRIGGER qa_Prueba_Abono_Atomicidad ON Pagos AFTER INSERT AS BEGIN SET NOCOUNT ON; IF EXISTS (SELECT 1 FROM inserted WHERE IdCliente = {clienteAbono.Id}) BEGIN ;THROW 51092, N'Fallo controlado de prueba.', 1; END; END;");
+    bool falloAbono = false;
+    try { tiendaPagos.RegistrarPago(SolicitudAbono(5), 2); }
+    catch (SqlException error) when (error.Number == 51092) { falloAbono = true; }
+    finally { SqlCompraPrueba("DROP TRIGGER IF EXISTS qa_Prueba_Abono_Atomicidad"); }
+    Verificar(falloAbono && tiendaPagos.ConsultarPagos(clienteAbono.Id).Count == 2 && DeudaAbono() == 18.76m, "Fallo despues de insertar revierte el abono y conserva la deuda anterior.");
+    var cancelacion = tiendaPagos.RegistrarPago(SolicitudAbono(18.76m), 1);
+    Verificar(cancelacion.SaldoRestante == 0 && DeudaAbono() == 0, "Cancelacion total deja deuda cero sin borrar el historial.");
+    Rechazar(() => tiendaPagos.RegistrarPago(SolicitudAbono(.01m), 2), "Cliente sin deuda no admite nuevos abonos.");
+    NuevoFiadoAbono(3);
+    var cobrosSimultaneos = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => Task.Run(() =>
+    {
+        try { new PagosSqlService(ConexionBD.Instancia).RegistrarPago(SolicitudAbono(20), 2); return true; }
+        catch (ArgumentException) { return false; }
+    })));
+    Verificar(cobrosSimultaneos.Count(x => x) == 1 && DeudaAbono() == 10, "Dos abonos de 20 sobre deuda de 30: solo uno se confirma y el saldo queda 10.");
+    await Task.WhenAll(Task.Run(() => NuevoFiadoAbono()), Task.Run(() => pagosSql.RegistrarPago(SolicitudAbono(), 2)));
+    Verificar(DeudaAbono() == 10 && Ficha(articuloAbono.Id).Stock == 13, "Fiado y abono simultaneos conservan ambas operaciones y el saldo correcto.");
+    var ultimosCobros = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => Task.Run(() =>
+    {
+        try { pagosSql.RegistrarPago(SolicitudAbono(), 2); return true; }
+        catch (ArgumentException) { return false; }
+    })));
+    Verificar(ultimosCobros.Count(x => x) == 1 && DeudaAbono() == 0, "Dos cobros de la ultima deuda no producen un saldo negativo.");
+    NuevoFiadoAbono();
+    var parciales = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => Task.Run(() => pagosSql.RegistrarPago(SolicitudAbono(5), 2))));
+    Verificar(parciales.Select(p => p.SaldoRestante).OrderBy(x => x).SequenceEqual(new decimal[] { 0, 5 }) && DeudaAbono() == 0, "Dos abonos parciales validos se confirman con saldos historicos de 5 y 0.");
+    NuevoFiadoAbono();
+    clientesSql.CambiarEstadoCliente(clienteAbono.Id, new() { Activo = false });
+    var pagoInactivo = tiendaPagos.RegistrarPago(SolicitudAbono(), 1);
+    Verificar(pagoInactivo.SaldoRestante == 0 && DeudaAbono() == 0 && !clientesSql.ConsultarClientes().Any(c => c.Id == clienteAbono.Id), "Cliente inactivo puede cancelar su deuda sin reactivarse.");
+    var propios = tiendaPagos.ConsultarPagos(clienteAbono.Id);
+    Verificar(propios.Count == 9 && propios.Sum(p => p.Monto) == 90 && propios.All(p => p.ClienteId == clienteAbono.Id && p.SaldoRestante >= 0), "Historial por cliente guarda nueve pagos y 90 soles sin saldos negativos.");
+    Verificar(propios.Single(p => p.Id == efectivoAbono.Id).SaldoRestante == 20 && Escalar($"SELECT SaldoInicial FROM Clientes WHERE IdCliente={clienteAbono.Id}") == 0, "Pagos posteriores no reescriben el saldo restante historico ni el saldo inicial.");
+    DateOnly diaPago = DateOnly.FromDateTime(pagoInactivo.Fecha.ToOffset(TimeSpan.FromHours(-5)).Date);
+    var reporteAbonos = tiendaPagos.Reporte(diaPago, diaPago);
+    Verificar(reporteAbonos.Abonos == 90 && reporteAbonos.TotalFiado == 90 && reporteAbonos.CobradoEnVentas == 0 && reporteAbonos.Pagos.Count == 9, "Reporte separa abonos nuevos de fiados sin duplicar el dinero cobrado.");
+    SqlCompraPrueba($"UPDATE Pagos SET Fecha='2002-01-02T04:59:59+00:00' WHERE IdPago={efectivoAbono.Id}; UPDATE Pagos SET Fecha='2002-01-02T05:00:00+00:00' WHERE IdPago={digitalAbono.Id}");
+    Verificar(tiendaPagos.Reporte(new(2002,1,1),new(2002,1,1)).Abonos == 10 && tiendaPagos.Reporte(new(2002,1,2),new(2002,1,2)).Abonos == 1.24m, "Reporte filtra abonos por los limites de medianoche de Lima.");
+    clientesSql.CambiarEstadoCliente(clienteAbono.Id, new() { Activo = true });
+    NuevoFiadoAbono();
+    ventasSql.RegistrarVenta(new() { FormaPago = "Fiado", ClienteId = clienteOtroAbono.Id, Items = new() { new() { ProductoId = articuloAbono.Id, Cantidad = 1 } } }, 2);
+    var clientesDistintos = await Task.WhenAll(Task.Run(() => pagosSql.RegistrarPago(SolicitudAbono(), 1)), Task.Run(() => pagosSql.RegistrarPago(new() { ClienteId = clienteOtroAbono.Id, Monto = 10, Metodo = "Digital" }, 2)));
+    Verificar(clientesDistintos.All(p => p.SaldoRestante == 0) && clientesDistintos.Select(p => p.ClienteId).Distinct().Count() == 2, "Abonos simultaneos de clientes distintos guardan sus propios saldos sin mezclar operaciones.");
+}
+finally
+{
+    SqlCompraPrueba("DROP TRIGGER IF EXISTS qa_Prueba_Abono_Atomicidad");
+    SqlCompraPrueba($"DELETE FROM Pagos WHERE IdCliente IN ({clienteAbono.Id},{clienteOtroAbono.Id}); DELETE FROM DetalleVentas WHERE IdVenta IN (SELECT IdVenta FROM Ventas WHERE IdCliente IN ({clienteAbono.Id},{clienteOtroAbono.Id})); DELETE FROM Ventas WHERE IdCliente IN ({clienteAbono.Id},{clienteOtroAbono.Id}); DELETE FROM Productos WHERE IdProducto={articuloAbono.Id}; DELETE FROM Clientes WHERE IdCliente IN ({clienteAbono.Id},{clienteOtroAbono.Id}); DELETE FROM Usuarios WHERE IdUsuario={usuarioAbono.Id}");
+}
+Verificar(tiendaPagos.ConsultarPagos(null).Count == 124 && ventasSql.ConsultarVentas(null,null).Count == 931 && productosSql.BuscarProductos(null,true).Count == 120 && clientesSql.ConsultarClientes(true).Count == 60, "Pruebas de abonos conservan los datos originales de la base temporal.");
 Console.WriteLine($"{comprobaciones} comprobaciones SQL correctas.");

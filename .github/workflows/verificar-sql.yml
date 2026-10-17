@@ -15,6 +15,7 @@ jobs:
       Persistencia__Productos: SqlServer
       Persistencia__Compras: SqlServer
       Persistencia__Ventas: SqlServer
+      Persistencia__Pagos: SqlServer
       ASPNETCORE_ENVIRONMENT: Development
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +50,7 @@ jobs:
           node tests/browser_productos_sql.cjs
           node tests/browser_compras_sql.cjs
           node tests/browser_ventas_sql.cjs
+          node tests/browser_pagos_sql.cjs
       - name: Reporte de la aplicacion
         if: always()
         uses: actions/upload-artifact@v4

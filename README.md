@@ -47,7 +47,7 @@ Server=localhost;Database=BodegaGiovanna;Integrated Security=True;Encrypt=True;T
 
 `TrustServerCertificate=True` permite el certificado local de esta instalación de prácticas. Si otro compañero ejecuta el proyecto, debe cambiar el nombre del servidor en su configuración; no necesita la contraseña de Windows en la cadena. También se puede sustituir la conexión con la variable `ConnectionStrings__BodegaGiovanna`.
 
-Los modos `Persistencia:Usuarios=Memoria`, `Persistencia:Clientes=Memoria`, `Persistencia:Proveedores=Memoria`, `Persistencia:Productos=Memoria`, `Persistencia:Compras=Memoria` y `Persistencia:Ventas=Memoria` se conservan **solo como selección explícita para pruebas sin SQL**. Los seis valores predeterminados son `SqlServer`: un fallo de conexión no activa registros alternativos ni cambia automáticamente a memoria. Para ejecutar todas las pruebas HTTP sin SQL, configura las seis variables `Persistencia__Usuarios=Memoria`, `Persistencia__Clientes=Memoria`, `Persistencia__Proveedores=Memoria`, `Persistencia__Productos=Memoria`, `Persistencia__Compras=Memoria` y `Persistencia__Ventas=Memoria`.
+Los modos `Persistencia:Usuarios=Memoria`, `Persistencia:Clientes=Memoria`, `Persistencia:Proveedores=Memoria`, `Persistencia:Productos=Memoria`, `Persistencia:Compras=Memoria`, `Persistencia:Ventas=Memoria` y `Persistencia:Pagos=Memoria` se conservan **solo como selección explícita para pruebas sin SQL**. Los siete valores predeterminados son `SqlServer`: un fallo de conexión no activa registros alternativos ni cambia automáticamente a memoria. Para ejecutar todas las pruebas HTTP sin SQL, configura las siete variables `Persistencia__Usuarios=Memoria`, `Persistencia__Clientes=Memoria`, `Persistencia__Proveedores=Memoria`, `Persistencia__Productos=Memoria`, `Persistencia__Compras=Memoria`, `Persistencia__Ventas=Memoria` y `Persistencia__Pagos=Memoria`.
 
 ## Clientes conectados a SQL Server
 
@@ -60,7 +60,7 @@ La deuda se obtiene de `vw_SaldosClientes` (saldo inicial + ventas al fiado - ab
 3. Registra un cliente de prueba y edita sus datos. Detén la aplicación y vuelve a ejecutarla: los cambios permanecen. Puedes confirmarlos con `SELECT * FROM Clientes` en SSMS.
 4. Desactiva y reactiva ese cliente. El cajero puede consultar los datos; solo el administrador puede modificarlos.
 
-**Alcance de esta etapa:** las ventas al fiado ya están habilitadas y actualizan la deuda calculada del cliente. El registro de nuevos abonos sigue pendiente; se puede consultar su historial. Las compras y ventas guardan sus transacciones y actualizan el stock. Reportes consulta ventas y abonos existentes de SQL. No ejecutes nuevamente los scripts ni vacíes las tablas.
+**Alcance de esta etapa:** las ventas al fiado ya están habilitadas y actualizan la deuda calculada del cliente. Los abonos ya están habilitados y reducen la deuda sin permitir pagos que la superen; conservan su historial y usuario. Las compras y ventas guardan sus transacciones y actualizan el stock. Reportes consulta ventas y abonos existentes de SQL. No ejecutes nuevamente los scripts ni vacíes las tablas.
 
 ## Proveedores conectados a SQL Server
 
@@ -114,7 +114,23 @@ Una sola transacción guarda cabecera, detalles y descuentos de stock. Los produ
 3. Revisa el stock en **Inventario** y la venta en **Reportes → Ver detalle**. Si fue fiado, comprueba la nueva deuda en **Clientes y fiados**.
 4. Reinicia y confirma que venta, detalles, usuario, stock y deuda permanecen.
 
-`Persistencia:Ventas=SqlServer` requiere Usuarios, Clientes y Productos en SqlServer. El registro de nuevos abonos será el siguiente módulo. No vuelvas a ejecutar los scripts de creación o llenado.
+`Persistencia:Ventas=SqlServer` requiere Usuarios, Clientes y Productos en SqlServer. Los abonos se registran desde Clientes y fiados y coordinan el saldo con las ventas al fiado. No vuelvas a ejecutar los scripts de creación o llenado.
+
+## Abonos conectados a SQL Server
+
+`Services/PagosSqlService.cs` consulta y registra `Pagos` mediante el mismo Singleton. El saldo actual se obtiene de `vw_SaldosClientes` (saldo inicial + fiados - abonos). Un pago nuevo reduce esa deuda sin modificar `SaldoInicial`, las ventas ni el inventario. El historial conserva el nombre del cliente al momento del pago, fecha, importe, método, usuario y saldo restante de esa operación.
+
+Administrador y cajero pueden registrar abonos parciales o cancelar toda la deuda. El controlador obtiene el usuario de la sesión y SQL confirma su rol y estado activo; los campos adicionales del navegador no pueden sustituir usuario, nombre del cliente, fecha o saldo restante. Se validan importes positivos dentro de `DECIMAL(18,2)`, redondeo a dos decimales, cliente existente y método Efectivo o Digital. Un cliente inactivo puede pagar su deuda pendiente.
+
+El registro utiliza una transacción y bloquea la fila del cliente con `UPDLOCK, HOLDLOCK` antes de consultar el saldo. Ventas al fiado utiliza el mismo bloqueo y orden, de modo que abonos y fiados simultáneos se calculan sobre la última deuda confirmada. Si el abono supera esa deuda, se rechaza sin guardar el pago. Si falla la escritura, se revierte la operación completa.
+
+1. Actualiza `avance-rf-csharp`, ejecuta con F5 y abre **Clientes y fiados** como administrador o cajero.
+2. Busca un cliente que tenga deuda y pulsa **Abonar**. La pantalla muestra la deuda pendiente y limita el importe del formulario.
+3. Ingresa un monto y elige **Efectivo** o **Yape / Plin**. En pagos digitales debes verificar la recepción externamente; no hay integración automática con billeteras.
+4. Pulsa **Registrar abono**. Verás el pago confirmado, la deuda reducida y el historial filtrado por ese cliente, incluido el usuario.
+5. Reinicia y comprueba que pago y deuda permanecen. Por ejemplo, deuda de S/ 30 menos abono de S/ 10 deja S/ 20; cancelar S/ 20 deja cero y deshabilita Abonar para ese cliente.
+
+Reportes y las descargas CSV/PDF incluyen los abonos del periodo, separados de las ventas al fiado para no duplicar los cobros. `Persistencia:Pagos=SqlServer` requiere Usuarios, Clientes y Ventas en SqlServer. No necesitas ejecutar scripts nuevos ni volver a cargar la base.
 
 ## Funciones disponibles
 
@@ -148,6 +164,8 @@ Una sola transacción guarda cabecera, detalles y descuentos de stock. Los produ
 - `Services/ComprasValidacion.cs`: validación compartida de líneas, costos, cantidades y límites.
 - `Services/VentasSqlService.cs`: historial y guardado transaccional de ventas, detalles, descuento de stock y fiados.
 - `Services/VentasValidacion.cs`: modalidades de pago, referencias, cantidades agrupadas y límites monetarios.
+- `Services/PagosSqlService.cs`: historial con usuarios y registro transaccional de abonos sobre el saldo real.
+- `Services/PagosValidacion.cs`: importes y métodos de abono, compartidos con el modo de pruebas.
 - `Datos/ConexionBD.cs`: Singleton que configura y crea conexiones a SQL Server.
 - `Services/IUsuariosService.cs`: contrato común de cuentas y sesiones.
 - `Services/UsuariosSqlService.cs`: cuentas, contraseñas y validación de sesiones persistidas.
@@ -157,7 +175,7 @@ Una sola transacción guarda cabecera, detalles y descuentos de stock. Los produ
 - `Views/Home`: pantallas MVC.
 - `wwwroot/js/site.js`: presenta las respuestas de C# y envía las operaciones.
 
-**Etapa actual:** usuarios, clientes, proveedores, productos, alternativas, compras y ventas usan SQL Server. Las compras reponen stock y las ventas lo descuentan; ambas conservan detalles y usuario. Los fiados actualizan la deuda del cliente. Reportes consulta ventas, abonos existentes y stock bajo reales, con exportación CSV/PDF. El registro de nuevos abonos sigue pendiente. Reiniciar conserva los datos. No hay integración automática con Yape o Plin.
+**Etapa actual:** usuarios, clientes, proveedores, productos, alternativas, compras, ventas y abonos usan SQL Server. Las compras reponen stock y las ventas lo descuentan; ambas conservan detalles y usuario. Los fiados actualizan la deuda del cliente. Reportes consulta ventas, abonos existentes y stock bajo reales, con exportación CSV/PDF. Los abonos nuevos actualizan la deuda y se guardan con fecha, usuario y saldo restante. Reiniciar conserva los datos. No hay integración automática con Yape o Plin.
 
 La exportación PDF usa QuestPDF 2026.9.1 con licencia Community para este proyecto académico. Visual Studio restaura el paquete NuGet al compilar por primera vez; después la generación se realiza localmente.
 
@@ -178,4 +196,4 @@ GitHub Actions compila el proyecto y ejecuta las comprobaciones en cada actualiz
 
 ## Pruebas con SQL Server
 
-El flujo `verificar-sql.yml` crea un SQL Server 2022 temporal, ejecuta los dos scripts completos, comprueba los hashes de las cuentas con PasswordHasher de .NET y prueba el Singleton, persistencia, bloqueos, permisos y operaciones HTTP. Para clientes comprueba DNI único ante concurrencia, conservación de deuda e historial, filtros, permisos y protección antifalsificación. Para proveedores comprueba RUC único, campos opcionales, validación de correo, conservación de compras históricas y selección de proveedores activos en Compras. Además reinicia el servidor web para comprobar la persistencia de ediciones y bajas, y prueba las reactivaciones. Para productos comprueba códigos únicos, precios, stock, metadatos e historial conservados, alternativas transaccionales, concurrencia, filtros de activos y disponibles, alertas y bloqueo de movimientos pendientes. Para Compras verifica la reposición concurrente, el usuario de sesión, importes, límites, historial persistente y reversión completa ante un fallo provocado durante la escritura del segundo detalle. El trigger de esa prueba solo existe en la base temporal y se elimina al terminar. Para Ventas prueba efectivo, digital y fiado, precios del servidor, deuda calculada, historia, fechas de Lima, stock insuficiente, fallo al escribir el segundo detalle, ventas simultáneas y cruce de compra/venta. Reinicia la aplicación para comprobar las ventas persistidas. Chromium verifica catálogos, compras y ventas, las tres formas de pago, agotamiento, deuda visible, detalle, recarga y permisos. Las claves del contenedor y de las cuentas se generan al ejecutar CI; no se almacenan en el repositorio. La autenticación SQL del contenedor solo se usa en CI; la configuración local sigue usando Windows. La conexión a localhost debe comprobarse desde ese equipo.
+El flujo `verificar-sql.yml` crea un SQL Server 2022 temporal, ejecuta los dos scripts completos, comprueba los hashes de las cuentas con PasswordHasher de .NET y prueba el Singleton, persistencia, bloqueos, permisos y operaciones HTTP. Para clientes comprueba DNI único ante concurrencia, conservación de deuda e historial, filtros, permisos y protección antifalsificación. Para proveedores comprueba RUC único, campos opcionales, validación de correo, conservación de compras históricas y selección de proveedores activos en Compras. Además reinicia el servidor web para comprobar la persistencia de ediciones y bajas, y prueba las reactivaciones. Para productos comprueba códigos únicos, precios, stock, metadatos e historial conservados, alternativas transaccionales, concurrencia, filtros de activos y disponibles, alertas y bloqueo de movimientos pendientes. Para Compras verifica la reposición concurrente, el usuario de sesión, importes, límites, historial persistente y reversión completa ante un fallo provocado durante la escritura del segundo detalle. El trigger de esa prueba solo existe en la base temporal y se elimina al terminar. Para Ventas prueba efectivo, digital y fiado, precios del servidor, deuda calculada, historia, fechas de Lima, stock insuficiente, fallo al escribir el segundo detalle, ventas simultáneas y cruce de compra/venta. Reinicia la aplicación para comprobar las ventas persistidas. Para Abonos verifica pago parcial y total, redondeo, usuario de sesión, clientes inactivos, conservación de saldos históricos, fallo provocado después de insertar, dos cobros sobre una misma deuda y cruce de fiado/abono. HTTP comprueba permisos, antifalsificación, campos falsificados, CSV y persistencia tras reiniciar. Chromium prueba un fiado nuevo, abono efectivo parcial, límite del formulario, cliente inactivo, cancelación digital por cajero, historial, usuario y reporte. Chromium verifica catálogos, compras y ventas, las tres formas de pago, agotamiento, deuda visible, detalle, recarga y permisos. Las claves del contenedor y de las cuentas se generan al ejecutar CI; no se almacenan en el repositorio. La autenticación SQL del contenedor solo se usa en CI; la configuración local sigue usando Windows. La conexión a localhost debe comprobarse desde ese equipo.

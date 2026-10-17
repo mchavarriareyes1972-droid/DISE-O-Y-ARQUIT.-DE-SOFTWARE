@@ -83,7 +83,7 @@ if '--verificar-reinicio' in sys.argv:
 else:
     clientes = api('clientes?incluirInactivos=true')
     verificar(len(clientes) == 60, 'La API muestra los 60 clientes cargados en SQL.')
-    verificar('data-pendiente="true"' in pagina_clientes, 'La pantalla indica que el registro de nuevos abonos esta pendiente.')
+    verificar('data-pendiente="false"' in pagina_clientes, 'La pantalla habilita el registro de nuevos abonos SQL.')
     pagos = api('pagos')
     verificar(len(pagos) == 124, 'La API muestra los 124 pagos de SQL.')
     verificar(all(p['clienteId'] == clientes[0]['id'] for p in api(f"pagos?clienteId={clientes[0]['id']}")), 'Historial filtrado correctamente por cliente SQL.')
@@ -106,9 +106,9 @@ else:
     api(ruta + '/editar', datos_cliente, conexion=caja, esperado=403)
     api(ruta + '/estado', {'activo': True}, conexion=caja, esperado=403)
     verificar(len(api('clientes?incluirInactivos=true', conexion=caja)) == 61, 'El cajero puede consultar clientes SQL sin administrarlos.')
-    api('pagos', {'clienteId': clientes[0]['id'], 'monto': 1, 'metodo': 'Efectivo'}, esperado=400)
+    api('pagos', {'clienteId': cliente['id'], 'monto': 1, 'metodo': 'Efectivo'}, esperado=400)
     api('ventas', {'formaPago': 'Fiado', 'clienteId': cliente['id'], 'items': [{'productoId': 1, 'cantidad': 1}]}, esperado=400)
-    verificar(len(api('pagos')) == 124, 'Las operaciones pendientes no generan pagos de practica ni modifican el historial SQL.')
+    verificar(len(api('pagos')) == 124, 'Las operaciones invalidas no generan pagos ni modifican el historial SQL.')
 
 datos_proveedor = {'ruc': '20990000011', 'razonSocial': 'Proveedor HTTP SQL', 'contacto': 'Contacto',
     'telefono': '999123123', 'correo': None, 'direccion': 'Lima'}
@@ -290,4 +290,41 @@ else:
     for formato, prefijo in [('csv', bytes([239,187,191])), ('pdf', b'%PDF')]:
         archivo = admin.open(base + '/api/tienda/reporte/exportar/' + formato).read()
         verificar(archivo.startswith(prefijo), 'Exportacion ' + formato + ' funciona con el historial SQL.')
+# Abonos al cliente de la venta fiada HTTP, sin modificar fixtures de catalogos.
+fiado_http = next(v for v in api('ventas') if v['formaPago'] == 'Fiado' and any(d['codigo'] == 'QA_HTTP_02' for d in v['detalles']))
+cliente_abono = next(c for c in api('clientes?incluirInactivos=true') if c['id'] == fiado_http['clienteId'])
+if '--verificar-reinicio' in sys.argv:
+    pagos_abono = api('pagos?clienteId=' + str(cliente_abono['id']))
+    verificar(len(api('pagos')) == 126 and pagos_abono[0]['monto'] == 2 and pagos_abono[1]['monto'] == 1, 'Ambos abonos permanecen en SQL despues de reiniciar el servidor.')
+    verificar(pagos_abono[0]['usuarioId'] == 2 and pagos_abono[1]['usuarioId'] == 1 and pagos_abono[0]['metodo'] == 'Digital', 'Historial conserva administrador, cajero y metodo del abono.')
+    verificar(cliente_abono['deuda'] == pagos_abono[0]['saldoRestante'] and round(pagos_abono[1]['saldoRestante'] - 2, 2) == pagos_abono[0]['saldoRestante'], 'La deuda reducida y los saldos historicos se conservan tras reiniciar.')
+else:
+    deuda_antes = cliente_abono['deuda']
+    datos_abono = {'clienteId': cliente_abono['id'], 'monto': 1, 'metodo': 'Efectivo', 'usuarioId': 2,
+        'fecha': '2000-01-01', 'saldoRestante': 999, 'clienteNombre': 'Nombre falso', 'deuda': 0}
+    pago_efectivo = api('pagos', datos_abono)
+    verificar(pago_efectivo['usuarioId'] == 1 and pago_efectivo['clienteNombre'] == cliente_abono['nombre'] and not pago_efectivo['fecha'].startswith('2000'), 'El abono toma usuario de sesion, cliente real y fecha SQL; ignora campos falsificados.')
+    verificar(pago_efectivo['saldoRestante'] == round(deuda_antes - 1, 2), 'Abono efectivo reduce exactamente un sol de deuda.')
+    # Clientes inactivos tambien pueden cancelar sus deudas pendientes.
+    api(f"clientes/{cliente_abono['id']}/estado", {'activo': False})
+    csrf_admin = csrf
+    csrf = token(caja.open(base + '/Home/Clientes').read().decode())
+    pago_digital = api('pagos', {**datos_abono, 'monto': 2, 'metodo': 'Digital', 'usuarioId': 1}, conexion=caja)
+    csrf = csrf_admin
+    verificar(pago_digital['usuarioId'] == 2 and pago_digital['saldoRestante'] == round(deuda_antes - 3, 2), 'Cajero registra abono digital a cliente inactivo y guarda el saldo correcto.')
+    api(f"clientes/{cliente_abono['id']}/estado", {'activo': True})
+    for invalido in [
+        {**datos_abono, 'monto': 0}, {**datos_abono, 'monto': -1}, {**datos_abono, 'monto': .001},
+        {**datos_abono, 'monto': deuda_antes + 1}, {**datos_abono, 'monto': 10000000000000000},
+        {**datos_abono, 'clienteId': 0}, {**datos_abono, 'clienteId': 2147483647},
+        {**datos_abono, 'metodo': 'Fiado'}, {**datos_abono, 'metodo': None}
+    ]: api('pagos', invalido, esperado=400)
+    api('pagos', datos_abono, esperado=400, con_token=False)
+    api('pagos', datos_abono, conexion=navegador(), esperado=401, con_token=False)
+    verificar(len(api('pagos')) == 126 and next(c for c in api('clientes') if c['id'] == cliente_abono['id'])['deuda'] == round(deuda_antes - 3, 2), 'Abonos rechazados conservan pagos y deuda confirmados.')
+    verificar(api('productos?busqueda=QA_HTTP_02')[0]['stock'] == 9 and len(api('ventas')) == 934, 'Los abonos no modifican ventas ni existencias.')
+    reporte_abonos = api('reporte')
+    verificar(len(reporte_abonos['pagos']) == 126 and reporte_abonos['abonos'] == round(sum(p['monto'] for p in reporte_abonos['pagos']), 2), 'Reporte incluye los nuevos abonos SQL sin alterar sus importes.')
+    csv_abonos = admin.open(base + '/api/tienda/reporte/exportar/csv').read().decode('utf-8-sig')
+    verificar('"Abono";"' + str(pago_digital['id']) + '";' in csv_abonos, 'CSV incluye el abono digital recien registrado.')
 print(f'{comprobaciones} comprobaciones HTTP con SQL correctas.')

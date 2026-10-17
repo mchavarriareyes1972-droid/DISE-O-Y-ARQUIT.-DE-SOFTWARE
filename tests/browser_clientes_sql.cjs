@@ -26,9 +26,9 @@ const fs = require('node:fs');
         // Las pruebas HTTP previas crearon un cliente y lo reactivaron tras reiniciar.
         await esperarTexto('cantidadClientes', 'Clientes registrados: 61');
         assert.equal(await page.locator('#tablaClientes tr').count(), 61);
-        await page.waitForFunction(() => document.querySelectorAll('#tablaPagos tr').length === 124);
-        assert(await page.locator('#formPago button[type=submit]').isDisabled());
-        assert(await page.locator('#tablaClientes button').filter({ hasText: /^Abonar$/ }).first().isDisabled());
+        await page.waitForFunction(() => document.querySelectorAll('#tablaPagos tr').length === 126);
+        assert(await page.locator('#formPago button[type=submit]').isEnabled());
+        assert(await page.locator('#tablaClientes button').filter({ hasText: /^Abonar$/ }).evaluateAll(botones => botones.some(b => !b.disabled)));
 
         await page.locator('#nuevoCliente').click();
         await page.locator('#documentoCliente').fill('99000021');
@@ -71,7 +71,7 @@ const fs = require('node:fs');
         assert.equal(await caja.getByRole('button', { name: 'Editar', exact: true }).count(), 0);
         await caja.locator('#buscarCliente').fill('99000021');
         assert((await caja.locator('#tablaClientes').innerText()).includes('Cliente SQL actualizado en pantalla'));
-        assert(await caja.locator('#formPago button[type=submit]').isDisabled());
+        assert(await caja.locator('#formPago button[type=submit]').isEnabled());
         fs.mkdirSync('/tmp/giovanna-qa', { recursive: true });
         await caja.screenshot({ path: '/tmp/giovanna-qa/clientes-sql.png', fullPage: true });
         assert.deepEqual(errores, []);

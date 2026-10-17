@@ -13,6 +13,9 @@ public partial class TiendaService
     private readonly ProductosSqlService? productosSql;
     private readonly ComprasSqlService? comprasSql;
     private readonly VentasSqlService? ventasSql;
+    private readonly PagosSqlService? pagosSql;
+    public bool PagosEnSql => pagosSql != null;
+    public bool PagosPendientes => ClientesEnSql && !PagosEnSql;
     public bool VentasEnSql => ventasSql != null;
     public bool VentasPendientes => ProductosEnSql && !VentasEnSql;
     public bool FiadosPendientes => ClientesEnSql && !VentasEnSql;
@@ -44,13 +47,14 @@ public partial class TiendaService
 
     public TiendaService() : this(() => DateTimeOffset.UtcNow) { }
     public TiendaService(Func<DateTimeOffset> reloj) { this.reloj = reloj; }
-    public TiendaService(ClientesSqlService? clientesSql, ProveedoresSqlService? proveedoresSql = null, ProductosSqlService? productosSql = null, ComprasSqlService? comprasSql = null, VentasSqlService? ventasSql = null) : this()
+    public TiendaService(ClientesSqlService? clientesSql, ProveedoresSqlService? proveedoresSql = null, ProductosSqlService? productosSql = null, ComprasSqlService? comprasSql = null, VentasSqlService? ventasSql = null, PagosSqlService? pagosSql = null) : this()
     {
         this.clientesSql = clientesSql;
         this.proveedoresSql = proveedoresSql;
         this.productosSql = productosSql;
         this.comprasSql = comprasSql;
         this.ventasSql = ventasSql;
+        this.pagosSql = pagosSql;
     }
     private static T Copia<T>(T valor) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(valor))!;
     private static decimal Moneda(decimal valor) => decimal.Round(valor, 2, MidpointRounding.AwayFromZero);
@@ -140,6 +144,7 @@ public partial class TiendaService
     }
     public List<Pago> ConsultarPagos(int? clienteId)
     {
+        if (pagosSql != null) return pagosSql.ConsultarPagos(clienteId);
         if (clientesSql != null) return clientesSql.ConsultarPagos(clienteId);
         lock (bloqueo) { return Copia(pagos.Where(p => !clienteId.HasValue || p.ClienteId == clienteId).OrderByDescending(p => p.Id).ToList()); }
     }
@@ -195,19 +200,19 @@ public partial class TiendaService
         }
     }
 
-    public Pago RegistrarPago(PagoSolicitud solicitud)
+    public Pago RegistrarPago(PagoSolicitud solicitud, int? usuarioId = null)
     {
+        if (pagosSql != null) return pagosSql.RegistrarPago(solicitud, usuarioId ?? 0);
         if (ClientesEnSql) throw new ArgumentException(MovimientosPendientes);
         lock (bloqueo)
         {
             Cliente cliente = clientes.FirstOrDefault(c => c.Id == solicitud.ClienteId)
                 ?? throw new ArgumentException("El cliente no existe.");
-            decimal monto = Moneda(solicitud.Monto);
-            if (monto <= 0 || monto > cliente.Deuda) throw new ArgumentException("El abono debe ser mayor que cero y no superar la deuda.");
-            if (!new[] { "Efectivo", "Digital" }.Contains(solicitud.Metodo)) throw new ArgumentException("Selecciona el método de pago.");
+            decimal monto = PagosValidacion.Validar(solicitud);
+            if (monto > cliente.Deuda) throw new ArgumentException("El abono debe ser mayor que cero y no superar la deuda.");
             cliente.Deuda = Moneda(cliente.Deuda - monto);
             Pago pago = new() { Id = pagos.Count + 1, ClienteId = cliente.Id, ClienteNombre = cliente.Nombre,
-                Fecha = reloj(), Monto = monto, Metodo = solicitud.Metodo, SaldoRestante = cliente.Deuda };
+                Fecha = reloj(), UsuarioId = usuarioId, Monto = monto, Metodo = solicitud.Metodo, SaldoRestante = cliente.Deuda };
             pagos.Add(pago);
             return Copia(pago);
         }

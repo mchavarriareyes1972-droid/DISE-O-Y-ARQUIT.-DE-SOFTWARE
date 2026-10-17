@@ -72,6 +72,8 @@ public class Venta
 
 public class Pago
 {
+    public int? UsuarioId { get; set; }
+    public string? UsuarioNombre { get; set; }
     public int Id { get; set; }
     public int ClienteId { get; set; }
     public string ClienteNombre { get; set; } = "";

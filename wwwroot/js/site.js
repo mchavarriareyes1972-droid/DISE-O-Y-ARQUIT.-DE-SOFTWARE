@@ -326,14 +326,21 @@ async function iniciarCompras() {
 async function renderPagos() {
     const id = $('filtrarPagos').value;
     const pagos = await api('pagos' + (id ? '?clienteId=' + id : ''));
-    tabla('tablaPagos', pagos, 6, p => [p.id, fecha(p.fecha), p.clienteNombre, p.metodo, dinero(p.monto), dinero(p.saldoRestante)]);
+    $('cantidadPagos').textContent = 'Pagos mostrados: ' + pagos.length;
+    tabla('tablaPagos', pagos, 7, p => [p.id, fecha(p.fecha), p.clienteNombre, p.metodo, dinero(p.monto), dinero(p.saldoRestante), p.usuarioNombre || 'Práctica']);
+}
+function actualizarLimiteAbono() {
+    const cliente = clientesCatalogo.find(c => c.id === Number($('clientePago').value));
+    $('montoPago').max = String(cliente?.deuda || 0);
+    $('saldoClientePago').textContent = cliente ? 'Deuda pendiente: ' + dinero(cliente.deuda) : 'No hay clientes con deuda pendiente.';
 }
 async function renderClientes() {
     const clientes = await api('clientes?incluirInactivos=true');
     clientesCatalogo = clientes;
     $('cantidadClientes').textContent = `Clientes registrados: ${clientes.length} · Activos: ${clientes.filter(c => c.activo).length}`;
     const deudores = clientes.filter(c => c.deuda > 0);
-    opciones($('clientePago'), deudores, c => `${c.nombre} · Deuda: ${dinero(c.deuda)}`, c => c.id);
+    opciones($('clientePago'), deudores, c => `${c.nombre}${c.activo ? '' : ' (inactivo)'} · Deuda: ${dinero(c.deuda)}`, c => c.id);
+    actualizarLimiteAbono();
     const pagoBloqueado = deudores.length === 0 || $('formPago').dataset.pendiente === 'true';
     $('formPago').querySelector('button[type=submit]').disabled = pagoBloqueado;
     $('formPago').querySelector('button[type=submit]').dataset.bloqueado = String(pagoBloqueado);
@@ -342,13 +349,15 @@ async function renderClientes() {
 }
 async function iniciarClientes() {
     await renderClientes(); await renderPagos();
+    $('clientePago').addEventListener('change', actualizarLimiteAbono);
     $('buscarCliente').addEventListener('input', renderTablaClientes);
     if (esAdministrador) iniciarGestionClientes();
     $('filtrarPagos').addEventListener('change', () => renderPagos().catch(e => mensaje('mensajeClientes', e.message, true)));
     formulario('formPago', 'mensajeClientes', async () => {
         const pago = await api('pagos', { clienteId: Number($('clientePago').value), monto: Number($('montoPago').value), metodo: $('metodoPago').value });
-        $('montoPago').value = ''; await renderClientes(); await renderPagos();
-        mensaje('mensajeClientes', `Pago N.º ${pago.id} registrado. Saldo restante: ${dinero(pago.saldoRestante)}.`);
+        $('montoPago').value = ''; await renderClientes();
+        $('filtrarPagos').value = String(pago.clienteId); await renderPagos();
+        mensaje('mensajeClientes', `Pago N.º ${pago.id} registrado. Abono: ${dinero(pago.monto)}. Saldo restante: ${dinero(pago.saldoRestante)}.`);
     });
 }
 
