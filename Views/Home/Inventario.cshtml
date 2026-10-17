@@ -1,3 +1,44 @@
 @{ ViewData["Title"] = "Inventario"; }
-<div class="page-heading"><div><p class="eyebrow">PRODUCTOS</p><h1>Inventario</h1><p>Consulta los precios y las unidades disponibles.</p></div><span class="badge" id="cantidadProductos"></span></div>
-<section class="card"><label for="buscarInventario">Buscar producto</label><input id="buscarInventario" type="search" placeholder="Escribe el nombre" /><div class="table-wrap"><table><thead><tr><th>Producto</th><th>Precio</th><th>Stock</th><th>Estado</th></tr></thead><tbody id="tablaInventario"></tbody></table></div></section>
+<div class="page-heading"><div><p class="eyebrow">PRODUCTOS</p><h1>Inventario</h1><p>Consulta productos, precios y existencias.</p></div>@if (User.IsInRole(Tienda_Giovanna.Models.Roles.Administrador)) { <button id="nuevoProducto" type="button" class="primary">Nuevo producto</button> }</div>
+<section class="card">
+    <label for="buscarInventario">Buscar por nombre o código</label><input id="buscarInventario" type="search" placeholder="Nombre o código" />
+    @if (User.IsInRole(Tienda_Giovanna.Models.Roles.Administrador)) { <label class="checkbox-label"><input id="mostrarInactivos" type="checkbox" /> Mostrar también productos inactivos</label> }
+    <div class="table-wrap"><table><thead><tr><th>Código</th><th>Producto</th><th>Precio</th><th>Stock</th><th>Mínimo</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="tablaInventario"></tbody></table></div>
+    <p id="mensajeInventario" class="message" role="status"></p>
+</section>
+@if (User.IsInRole(Tienda_Giovanna.Models.Roles.Administrador))
+{
+<div class="two-columns spaced">
+    <section class="card"><h2>Stock mínimo</h2>
+        <form id="formStockMinimo">
+            <label for="productoMinimo">Producto</label><select id="productoMinimo"></select>
+            <label for="stockMinimo">Cantidad mínima</label><input id="stockMinimo" type="number" min="0" step="1" required />
+            <button type="submit" class="primary">Guardar stock mínimo</button>
+        </form>
+    </section>
+    <section class="card"><h2>Productos alternativos</h2>
+        <form id="formAlternativas">
+            <label for="productoOriginal">Producto solicitado</label><select id="productoOriginal"></select>
+            <label for="productosAlternativos">Productos sustitutos</label><select id="productosAlternativos" multiple size="5"></select>
+            <small>Mantén Ctrl presionado para seleccionar varios. Solo se ofrecen alternativas con stock.</small>
+            <button type="submit" class="primary">Guardar alternativas</button>
+        </form>
+    </section>
+</div>
+<dialog id="dialogoProducto" aria-labelledby="tituloProducto">
+    <h2 id="tituloProducto">Nuevo producto</h2>
+    <form id="formProducto">
+        <input id="productoEditarId" type="hidden" />
+        <div class="form-grid">
+            <div><label for="codigoProducto">Código</label><input id="codigoProducto" maxlength="20" required placeholder="P008" /></div>
+            <div><label for="nombreProducto">Nombre</label><input id="nombreProducto" maxlength="100" required placeholder="Atún en lata" /></div>
+            <div><label for="precioProducto">Precio de venta (S/)</label><input id="precioProducto" type="number" min="0.01" step="0.01" required /></div>
+            <div id="campoStockInicial"><label for="stockInicialProducto">Stock inicial</label><input id="stockInicialProducto" type="number" min="0" step="1" value="0" required /></div>
+            <div><label for="minimoProducto">Stock mínimo</label><input id="minimoProducto" type="number" min="0" step="1" value="5" required /></div>
+        </div>
+        <small id="notaStockProducto">Después del registro, las entradas de stock se realizan en Compras.</small>
+        <p id="mensajeProducto" class="message" role="status"></p>
+        <div class="button-row"><button type="submit" class="primary">Guardar producto</button><button id="cancelarProducto" type="button">Cancelar</button></div>
+    </form>
+</dialog>
+}

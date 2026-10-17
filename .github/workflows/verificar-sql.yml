@@ -1,0 +1,39 @@
+name: Verificar usuarios y datos en SQL Server
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      Persistencia__Usuarios: SqlServer
+      ASPNETCORE_ENVIRONMENT: Development
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Crear y cargar una base temporal con claves generadas
+        run: python3 tests/preparar_sql_ci.py
+      - name: Compilar el proyecto
+        run: dotnet build Tienda_Giovanna.csproj
+      - name: Probar autenticacion, persistencia, restricciones y Singleton
+        run: dotnet run --project tests/SqlChecks/SqlChecks.csproj
+      - name: Probar la aplicacion HTTP usando usuarios de SQL Server
+        run: |
+          dotnet run --no-build --no-launch-profile --project Tienda_Giovanna.csproj --urls http://127.0.0.1:5099 > /tmp/giovanna-sql.log 2>&1 &
+          servidor=$!
+          trap 'kill "$servidor"' EXIT
+          python3 tests/http_sql_checks.py
+      - name: Reporte de la aplicacion
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-sql
+          path: /tmp/giovanna-sql.log
+      - name: Eliminar contenedor temporal
+        if: always()
+        run: docker rm -f giovanna-sql-ci
