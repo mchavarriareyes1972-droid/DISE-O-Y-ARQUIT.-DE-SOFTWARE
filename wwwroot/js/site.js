@@ -326,10 +326,12 @@ async function renderPagos() {
 async function renderClientes() {
     const clientes = await api('clientes?incluirInactivos=true');
     clientesCatalogo = clientes;
+    $('cantidadClientes').textContent = `Clientes registrados: ${clientes.length} · Activos: ${clientes.filter(c => c.activo).length}`;
     const deudores = clientes.filter(c => c.deuda > 0);
     opciones($('clientePago'), deudores, c => `${c.nombre} · Deuda: ${dinero(c.deuda)}`, c => c.id);
-    $('formPago').querySelector('button[type=submit]').disabled = deudores.length === 0;
-    $('formPago').querySelector('button[type=submit]').dataset.bloqueado = String(deudores.length === 0);
+    const pagoBloqueado = deudores.length === 0 || $('formPago').dataset.pendiente === 'true';
+    $('formPago').querySelector('button[type=submit]').disabled = pagoBloqueado;
+    $('formPago').querySelector('button[type=submit]').dataset.bloqueado = String(pagoBloqueado);
     opciones($('filtrarPagos'), clientes, c => c.nombre, c => c.id, 'Todos los clientes');
     renderTablaClientes();
 }

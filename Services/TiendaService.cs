@@ -3,11 +3,14 @@ using Tienda_Giovanna.Models;
 
 namespace Tienda_Giovanna.Services;
 
-// Almacenamiento temporal para practicar los RF. Más adelante se conectará a la BD.
+// Clientes puede usar SQL; los otros modulos conservan su almacenamiento de practica.
 public partial class TiendaService
 {
     private readonly object bloqueo = new();
     private readonly Func<DateTimeOffset> reloj;
+    private readonly ClientesSqlService? clientesSql;
+    public bool ClientesEnSql => clientesSql != null;
+    public const string MovimientosPendientes = "El registro de nuevos fiados y abonos estará disponible al completar la conexión de ventas y pagos. Puedes consultar los saldos y pagos existentes.";
     private readonly List<Producto> productos = new()
     {
         new() { Id = 1, Codigo = "P001", Nombre = "Arroz 1 kg", Precio = 4.50m, Stock = 18 },
@@ -29,6 +32,7 @@ public partial class TiendaService
 
     public TiendaService() : this(() => DateTimeOffset.UtcNow) { }
     public TiendaService(Func<DateTimeOffset> reloj) { this.reloj = reloj; }
+    public TiendaService(ClientesSqlService clientesSql) : this() { this.clientesSql = clientesSql; }
     private static T Copia<T>(T valor) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(valor))!;
     private static decimal Moneda(decimal valor) => decimal.Round(valor, 2, MidpointRounding.AwayFromZero);
     private Producto ObtenerProducto(int id) => productos.FirstOrDefault(p => p.Id == id)
@@ -112,15 +116,21 @@ public partial class TiendaService
         }
     }
 
-    public List<Cliente> ConsultarClientes(bool incluirInactivos = false) { lock (bloqueo) { return Copia(clientes.Where(c => incluirInactivos || c.Activo).ToList()); } }
+    public List<Cliente> ConsultarClientes(bool incluirInactivos = false)
+    {
+        if (clientesSql != null) return clientesSql.ConsultarClientes(incluirInactivos);
+        lock (bloqueo) { return Copia(clientes.Where(c => incluirInactivos || c.Activo).ToList()); }
+    }
     public List<Pago> ConsultarPagos(int? clienteId)
     {
+        if (clientesSql != null) return clientesSql.ConsultarPagos(clienteId);
         lock (bloqueo) { return Copia(pagos.Where(p => !clienteId.HasValue || p.ClienteId == clienteId).OrderByDescending(p => p.Id).ToList()); }
     }
     public List<Compra> ConsultarCompras() { lock (bloqueo) { return Copia(compras.OrderByDescending(c => c.Id).ToList()); } }
 
     public Venta RegistrarVenta(VentaSolicitud solicitud)
     {
+        if (ClientesEnSql && solicitud.FormaPago == "Fiado") throw new ArgumentException(MovimientosPendientes);
         lock (bloqueo)
         {
             if (solicitud.Items == null || solicitud.Items.Count == 0 || solicitud.Items.Any(i => i == null || i.Cantidad <= 0))
@@ -164,6 +174,7 @@ public partial class TiendaService
 
     public Pago RegistrarPago(PagoSolicitud solicitud)
     {
+        if (ClientesEnSql) throw new ArgumentException(MovimientosPendientes);
         lock (bloqueo)
         {
             Cliente cliente = clientes.FirstOrDefault(c => c.Id == solicitud.ClienteId)

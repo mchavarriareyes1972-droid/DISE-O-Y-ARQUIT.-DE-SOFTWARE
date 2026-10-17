@@ -1,3 +1,4 @@
+@inject Tienda_Giovanna.Services.TiendaService Tienda
 @{ ViewData["Title"] = "Inicio"; }
 <div class="page-heading"><div><p class="eyebrow">PANEL GENERAL</p><h1>Bienvenidos a Bodega Giovanna</h1><p>Accede a las funciones principales del sistema desde el menú.</p></div></div>
 <div class="cards">
@@ -9,8 +10,15 @@
     <a class="card link-card" href="@Url.Action("Proveedores", "Home")"><h2>Proveedores</h2><p>Administrar distribuidores y datos de contacto.</p><span class="more">Abrir módulo →</span></a>
     <a class="card link-card" href="@Url.Action("Usuarios", "Home")"><h2>Usuarios</h2><p>Administrar cuentas y permisos.</p><span class="more">Abrir módulo →</span></a>
   }
-  <a class="card link-card" href="@Url.Action("Clientes", "Home")"><h2>Clientes y fiados</h2><p>Consultar saldos y registrar abonos.</p><span class="more">Abrir módulo →</span></a>
+  <a class="card link-card" href="@Url.Action("Clientes", "Home")"><h2>Clientes y fiados</h2><p>Consultar clientes, saldos e historial de pagos.</p><span class="more">Abrir módulo →</span></a>
   <a class="card link-card" href="@Url.Action("Reportes", "Home")"><h2>Reportes</h2><p>Consultar ventas por fechas y revisar sus detalles.</p><span class="more">Abrir módulo →</span></a>
 </div>
-<div class="notice">Usa datos de prueba para practicar ventas, compras y abonos. La información se conserva mientras la aplicación esté ejecutándose y se reinicia al cerrarla.</div>
+@if (Tienda.ClientesEnSql)
+{
+  <div class="notice">Los clientes, sus deudas y su historial de pagos se consultan desde la base de datos. Los cambios de clientes se conservan al cerrar el programa. Inventario, proveedores, compras, ventas y reportes siguen con datos temporales de práctica. El registro de nuevos fiados y abonos estará disponible al completar su conexión.</div>
+}
+else
+{
+  <div class="notice">Usa datos de prueba para practicar ventas, compras y abonos. La información de estos módulos se conserva mientras la aplicación esté ejecutándose y se reinicia al cerrarla.</div>
+}
 

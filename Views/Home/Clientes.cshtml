@@ -1,12 +1,17 @@
+@inject Tienda_Giovanna.Services.TiendaService Tienda
 @{ ViewData["Title"] = "Clientes y fiados"; }
-<div class="page-heading"><div><p class="eyebrow">CUENTAS POR COBRAR</p><h1>Clientes y fiados</h1><p>Consulta clientes y registra abonos parciales o totales.</p></div>@if (User.IsInRole(Tienda_Giovanna.Models.Roles.Administrador)) { <button id="nuevoCliente" type="button" class="primary">Nuevo cliente</button> }</div>
-<section class="card"><label for="buscarCliente">Buscar por nombre o DNI</label><input id="buscarCliente" type="search" /><div class="table-wrap"><table><thead><tr><th>DNI</th><th>Cliente</th><th>Teléfono</th><th>Dirección</th><th>Deuda</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="tablaClientes"></tbody></table></div><p class="muted">Un cliente inactivo puede cancelar su deuda, pero no recibir nuevos fiados.</p></section>
+<div class="page-heading"><div><p class="eyebrow">CUENTAS POR COBRAR</p><h1>Clientes y fiados</h1><p>Consulta clientes, sus deudas y su historial de pagos.</p><p id="cantidadClientes" class="muted" role="status"></p></div>@if (User.IsInRole(Tienda_Giovanna.Models.Roles.Administrador)) { <button id="nuevoCliente" type="button" class="primary">Nuevo cliente</button> }</div>
+@if (Tienda.ClientesEnSql)
+{
+    <p class="card" role="status">@Tienda_Giovanna.Services.TiendaService.MovimientosPendientes</p>
+}
+<section class="card"><label for="buscarCliente">Buscar por nombre o DNI</label><input id="buscarCliente" type="search" /><div class="table-wrap"><table><thead><tr><th>DNI</th><th>Cliente</th><th>Teléfono</th><th>Dirección</th><th>Deuda</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="tablaClientes"></tbody></table></div><p class="muted">Desactivar un cliente conserva su deuda y su historial.</p></section>
 <section class="card spaced"><h2>Registrar pago</h2>
-    <form id="formPago"><div class="form-grid">
+    <form id="formPago" data-pendiente="@Tienda.ClientesEnSql.ToString().ToLowerInvariant()"><fieldset disabled="@Tienda.ClientesEnSql"><div class="form-grid">
         <div><label for="clientePago">Cliente</label><select id="clientePago" required></select></div>
         <div><label for="montoPago">Monto del abono (S/)</label><input id="montoPago" type="number" min="0.01" step="0.01" required /></div>
         <div><label for="metodoPago">Método de pago</label><select id="metodoPago"><option>Efectivo</option><option value="Digital">Yape / Plin</option></select></div>
-    </div><button class="primary" type="submit">Registrar abono</button></form><p id="mensajeClientes" class="message" role="status"></p>
+    </div><button class="primary" type="submit">Registrar abono</button></fieldset></form><p id="mensajeClientes" class="message" role="status"></p>
 </section>
 <section class="card spaced"><h2>Historial de pagos</h2><label for="filtrarPagos">Cliente</label><select id="filtrarPagos"></select><div class="table-wrap"><table><thead><tr><th>N.º</th><th>Fecha</th><th>Cliente</th><th>Método</th><th>Abono</th><th>Saldo restante</th></tr></thead><tbody id="tablaPagos"></tbody></table></div></section>
 @if (User.IsInRole(Tienda_Giovanna.Models.Roles.Administrador))

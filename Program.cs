@@ -8,17 +8,25 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
-builder.Services.AddSingleton(new Tienda_Giovanna.Services.TiendaService());
 string persistenciaUsuarios = builder.Configuration["Persistencia:Usuarios"] ?? "SqlServer";
-if (persistenciaUsuarios == "SqlServer")
+string persistenciaClientes = builder.Configuration["Persistencia:Clientes"] ?? "SqlServer";
+if (persistenciaUsuarios is not ("SqlServer" or "Memoria") || persistenciaClientes is not ("SqlServer" or "Memoria"))
+    throw new InvalidOperationException("Persistencia:Usuarios y Persistencia:Clientes deben ser SqlServer o Memoria.");
+if (persistenciaUsuarios == "SqlServer" || persistenciaClientes == "SqlServer")
 {
     ConexionBD.Instancia.Configurar(builder.Configuration.GetConnectionString("BodegaGiovanna") ?? "");
     builder.Services.AddSingleton(ConexionBD.Instancia);
-    builder.Services.AddSingleton<IUsuariosService, UsuariosSqlService>();
 }
-else if (persistenciaUsuarios == "Memoria")
+if (persistenciaUsuarios == "SqlServer")
+    builder.Services.AddSingleton<IUsuariosService, UsuariosSqlService>();
+else
     builder.Services.AddSingleton<IUsuariosService, UsuariosMemoriaService>();
-else throw new InvalidOperationException("Persistencia:Usuarios debe ser SqlServer o Memoria.");
+if (persistenciaClientes == "SqlServer")
+{
+    builder.Services.AddSingleton<ClientesSqlService>();
+    builder.Services.AddSingleton(sp => new TiendaService(sp.GetRequiredService<ClientesSqlService>()));
+}
+else builder.Services.AddSingleton(new TiendaService());
 builder.Services.AddSingleton<ExportacionService>();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(opciones =>
 {

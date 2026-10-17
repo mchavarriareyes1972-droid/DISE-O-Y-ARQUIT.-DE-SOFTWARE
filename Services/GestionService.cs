@@ -20,14 +20,13 @@ public partial class TiendaService
     }
     private Cliente ValidarCliente(ClienteSolicitud solicitud, int? id = null)
     {
-        string dni = Texto(solicitud.Documento, 8, "DNI", true);
-        if (!Regex.IsMatch(dni, @"^[0-9]{8}$")) throw new ArgumentException("El DNI debe tener 8 dígitos.");
-        if (clientes.Any(c => c.Id != id && c.Documento == dni)) throw new ArgumentException("Ya existe un cliente con ese DNI, incluso si está inactivo.");
-        return new() { Documento = dni, Nombre = Texto(solicitud.Nombre, 100, "nombre", true),
-            Telefono = Texto(solicitud.Telefono, 20, "teléfono"), Direccion = Texto(solicitud.Direccion, 150, "dirección") };
+        Cliente datos = ClientesValidacion.Validar(solicitud);
+        if (clientes.Any(c => c.Id != id && c.Documento == datos.Documento)) throw new ArgumentException("Ya existe un cliente con ese DNI, incluso si está inactivo.");
+        return datos;
     }
     public Cliente RegistrarCliente(ClienteSolicitud solicitud)
     {
+        if (clientesSql != null) return clientesSql.RegistrarCliente(solicitud);
         lock (bloqueo)
         {
             Cliente cliente = ValidarCliente(solicitud);
@@ -38,6 +37,7 @@ public partial class TiendaService
     }
     public Cliente EditarCliente(int id, ClienteSolicitud solicitud)
     {
+        if (clientesSql != null) return clientesSql.EditarCliente(id, solicitud);
         lock (bloqueo)
         {
             Cliente cliente = clientes.FirstOrDefault(c => c.Id == id) ?? throw new ArgumentException("El cliente no existe.");
@@ -50,6 +50,7 @@ public partial class TiendaService
     }
     public Cliente CambiarEstadoCliente(int id, EstadoSolicitud solicitud)
     {
+        if (clientesSql != null) return clientesSql.CambiarEstadoCliente(id, solicitud);
         lock (bloqueo)
         {
             Cliente cliente = clientes.FirstOrDefault(c => c.Id == id) ?? throw new ArgumentException("El cliente no existe.");

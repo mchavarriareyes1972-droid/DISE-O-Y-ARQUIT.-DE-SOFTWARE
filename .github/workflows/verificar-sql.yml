@@ -10,6 +10,7 @@ jobs:
     timeout-minutes: 15
     env:
       Persistencia__Usuarios: SqlServer
+      Persistencia__Clientes: SqlServer
       ASPNETCORE_ENVIRONMENT: Development
     steps:
       - uses: actions/checkout@v4
@@ -22,18 +23,32 @@ jobs:
         run: dotnet build Tienda_Giovanna.csproj
       - name: Probar autenticacion, persistencia, restricciones y Singleton
         run: dotnet run --project tests/SqlChecks/SqlChecks.csproj
+      - name: Preparar Chromium para probar clientes de SQL
+        run: |
+          npm install --prefix /tmp/giovanna-ui --no-save playwright@1.62.1
+          /tmp/giovanna-ui/node_modules/.bin/playwright install --with-deps chromium
       - name: Probar la aplicacion HTTP usando usuarios de SQL Server
+        env:
+          NODE_PATH: /tmp/giovanna-ui/node_modules
         run: |
           dotnet run --no-build --no-launch-profile --project Tienda_Giovanna.csproj --urls http://127.0.0.1:5099 > /tmp/giovanna-sql.log 2>&1 &
           servidor=$!
           trap 'kill "$servidor"' EXIT
           python3 tests/http_sql_checks.py
+          kill "$servidor"
+          wait "$servidor" || true
+          dotnet run --no-build --no-launch-profile --project Tienda_Giovanna.csproj --urls http://127.0.0.1:5099 >> /tmp/giovanna-sql.log 2>&1 &
+          servidor=$!
+          python3 tests/http_sql_checks.py --verificar-reinicio
+          node tests/browser_clientes_sql.cjs
       - name: Reporte de la aplicacion
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: reporte-sql
-          path: /tmp/giovanna-sql.log
+          path: |
+            /tmp/giovanna-sql.log
+            /tmp/giovanna-qa
       - name: Eliminar contenedor temporal
         if: always()
         run: docker rm -f giovanna-sql-ci

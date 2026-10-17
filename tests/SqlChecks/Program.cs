@@ -71,4 +71,59 @@ using(var c=ConexionBD.Instancia.CrearConexion())
 {
     c.Open();using var cmd=new SqlCommand("DELETE FROM Usuarios WHERE Login IN ('qa_auxiliar','qa_concurrente')",c);cmd.ExecuteNonQuery();
 }
+// Clientes: el mismo Singleton y las mismas tablas que utiliza la aplicacion.
+var clientesSql = new ClientesSqlService(ConexionBD.Instancia);
+var tiendaSql = new TiendaService(clientesSql);
+Verificar(tiendaSql.ConsultarClientes(true).Count == 60, "Clientes consulta las 60 personas de SQL, sin mezclar los dos ejemplos en memoria.");
+Verificar(tiendaSql.ConsultarPagos(null).Count == 124, "Historial de pagos consultado desde SQL.");
+var original = tiendaSql.ConsultarClientes(true).First(c => c.Deuda > 0);
+var historial = tiendaSql.ConsultarPagos(original.Id);
+Verificar(historial.All(p => p.ClienteId == original.Id), "Filtro de historial por cliente.");
+var datosOriginales = new ClienteSolicitud { Documento = original.Documento, Nombre = original.Nombre, Telefono = original.Telefono, Direccion = original.Direccion };
+try
+{
+    var editado = tiendaSql.EditarCliente(original.Id, new() { Documento = original.Documento, Nombre = "Cliente editado en SQL", Telefono = "999000111", Direccion = "Direccion de prueba" });
+    Verificar(editado.Deuda == original.Deuda && Escalar($"SELECT COUNT(*) FROM Clientes WHERE IdCliente = {original.Id} AND SaldoInicial >= 0") == 1, "Editar conserva la deuda calculada.");
+    Verificar(JsonSerializer.Serialize(tiendaSql.ConsultarPagos(original.Id)) == JsonSerializer.Serialize(historial), "Editar no modifica el historial de pagos ni sus nombres originales.");
+    tiendaSql.CambiarEstadoCliente(original.Id, new() { Activo = false });
+    Verificar(!tiendaSql.ConsultarClientes().Any(c => c.Id == original.Id) && tiendaSql.ConsultarClientes(true).Single(c => c.Id == original.Id).Deuda == original.Deuda, "Inactivos se filtran y conservan su deuda.");
+    Rechazar(() => tiendaSql.RegistrarCliente(datosOriginales), "DNI de cliente inactivo sigue reservado.");
+}
+finally
+{
+    tiendaSql.EditarCliente(original.Id, datosOriginales);
+    tiendaSql.CambiarEstadoCliente(original.Id, new() { Activo = original.Activo });
+}
+ClienteSolicitud datosCliente = new() { Documento = "99000001", Nombre = "  Cliente SQL nuevo  " };
+try
+{
+    var nuevo = tiendaSql.RegistrarCliente(datosCliente);
+    Verificar(nuevo.Deuda == 0 && nuevo.Activo && nuevo.Nombre == "Cliente SQL nuevo" && nuevo.Telefono == "" && nuevo.Direccion == "", "Cliente nuevo normaliza campos, usa saldo cero y estado activo.");
+    var segundaTienda = new TiendaService(new ClientesSqlService(ConexionBD.Instancia));
+    Verificar(segundaTienda.ConsultarClientes().Any(c => c.Id == nuevo.Id), "Un servicio nuevo recupera el cliente guardado en SQL.");
+    Rechazar(() => tiendaSql.EditarCliente(nuevo.Id, datosOriginales), "No se puede editar a un DNI ya registrado.");
+    Rechazar(() => tiendaSql.RegistrarCliente(new() { Documento = "123", Nombre = "Invalido" }), "DNI invalido no se guarda.");
+    Rechazar(() => tiendaSql.RegistrarCliente(new() { Documento = "99000003", Nombre = " " }), "Nombre vacio no se guarda.");
+    Rechazar(() => tiendaSql.RegistrarCliente(new() { Documento = "99000003", Nombre = new string('x', 101) }), "Nombre demasiado largo no se guarda.");
+    Rechazar(() => tiendaSql.EditarCliente(int.MaxValue, datosCliente), "Editar un cliente inexistente devuelve un error controlado.");
+    Rechazar(() => tiendaSql.CambiarEstadoCliente(int.MaxValue, new() { Activo = false }), "Estado de un cliente inexistente devuelve un error controlado.");
+    Rechazar(() => tiendaSql.CambiarEstadoCliente(nuevo.Id, new()), "El estado es obligatorio.");
+    var antes = JsonSerializer.Serialize(tiendaSql.ConsultarClientes(true));
+    Rechazar(() => tiendaSql.RegistrarPago(new() { ClienteId = original.Id, Monto = 1, Metodo = "Efectivo" }), "No registrar abonos en memoria sobre clientes de SQL.");
+    int stockAntes = tiendaSql.BuscarProductos(null).First(p => p.Id == 1).Stock;
+    Rechazar(() => tiendaSql.RegistrarVenta(new() { FormaPago = "Fiado", ClienteId = original.Id, Items = new() { new() { ProductoId = 1, Cantidad = 1 } } }), "No registrar fiados hasta migrar ventas.");
+    Verificar(antes == JsonSerializer.Serialize(tiendaSql.ConsultarClientes(true)) && tiendaSql.BuscarProductos(null).First(p => p.Id == 1).Stock == stockAntes && tiendaSql.ConsultarPagos(null).Count == 124, "Operaciones pendientes no cambian deudas, stock ni pagos.");
+    var simultaneos = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Task.Run(() =>
+    {
+        try { new ClientesSqlService(ConexionBD.Instancia).RegistrarCliente(new() { Documento = "99000002", Nombre = "Concurrente" }); return true; }
+        catch (ArgumentException) { return false; }
+    })));
+    Verificar(simultaneos.Count(x => x) == 1, "DNI unico ante registros simultaneos.");
+}
+finally
+{
+    using var c = ConexionBD.Instancia.CrearConexion(); c.Open();
+    using var cmd = new SqlCommand("DELETE FROM Clientes WHERE Documento IN ('99000001', '99000002')", c); cmd.ExecuteNonQuery();
+}
+Verificar(tiendaSql.ConsultarClientes(true).Count == 60, "Pruebas de clientes dejan intacta la carga original.");
 Console.WriteLine($"{comprobaciones} comprobaciones SQL correctas.");

@@ -21,7 +21,7 @@ function renderTablaClientes() {
     const texto = $('buscarCliente').value.trim().toLowerCase();
     tabla('tablaClientes', clientesCatalogo.filter(c => c.nombre.toLowerCase().includes(texto) || c.documento.includes(texto)), 7, c => {
         const acciones = elemento('div', '', 'button-row');
-        acciones.append(boton('Abonar', () => { $('clientePago').value = c.id; $('montoPago').value = c.deuda.toFixed(2); $('montoPago').focus(); }, c.deuda === 0));
+        acciones.append(boton('Abonar', () => { $('clientePago').value = c.id; $('montoPago').value = c.deuda.toFixed(2); $('montoPago').focus(); }, c.deuda === 0 || $('formPago').dataset.pendiente === 'true'));
         if (esAdministrador) acciones.append(boton('Editar', () => abrirCliente(c)), boton(c.activo ? 'Desactivar' : 'Activar', evento => estadoRegistro('clientes', c, evento.currentTarget, 'mensajeClientes', renderClientes)));
         return [c.documento, c.nombre, c.telefono, c.direccion, dinero(c.deuda), c.activo ? 'Activo' : 'Inactivo', acciones];
     });

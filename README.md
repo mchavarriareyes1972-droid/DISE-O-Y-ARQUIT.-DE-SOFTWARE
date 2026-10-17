@@ -47,7 +47,20 @@ Server=localhost;Database=BodegaGiovanna;Integrated Security=True;Encrypt=True;T
 
 `TrustServerCertificate=True` permite el certificado local de esta instalación de prácticas. Si otro compañero ejecuta el proyecto, debe cambiar el nombre del servidor en su configuración; no necesita la contraseña de Windows en la cadena. También se puede sustituir la conexión con la variable `ConnectionStrings__BodegaGiovanna`.
 
-El modo `Persistencia:Usuarios=Memoria` se conserva **solo como selección explícita para pruebas sin SQL**. El valor predeterminado es `SqlServer`: un fallo de conexión no activa cuentas alternativas ni cambia automáticamente a memoria.
+Los modos `Persistencia:Usuarios=Memoria` y `Persistencia:Clientes=Memoria` se conservan **solo como selección explícita para pruebas sin SQL**. Ambos valores predeterminados son `SqlServer`: un fallo de conexión no activa cuentas ni clientes alternativos ni cambia automáticamente a memoria. Para ejecutar todas las pruebas HTTP sin SQL, configura las dos variables `Persistencia__Usuarios=Memoria` y `Persistencia__Clientes=Memoria`.
+
+## Clientes conectados a SQL Server
+
+`Services/ClientesSqlService.cs` utiliza el mismo Singleton `ConexionBD` para consultar, registrar, editar y activar o desactivar clientes con consultas parametrizadas. SQL Server asigna el identificador y garantiza el DNI único, incluso si el cliente está inactivo o hay registros simultáneos. Cada operación libera su conexión; los cambios se confirman en una transacción.
+
+La deuda se obtiene de `vw_SaldosClientes` (saldo inicial + ventas al fiado - abonos), y el historial se consulta desde `Pagos`. El formulario no puede modificar la deuda ni el saldo inicial; editar o desactivar conserva los movimientos históricos.
+
+1. Actualiza `avance-rf-csharp`, ejecuta con F5 e ingresa como administrador.
+2. Abre **Clientes y fiados**: con la carga original verás **60 clientes registrados**, sus estados, sus deudas y los **124 pagos** del script, con filtro por cliente. También puedes buscar por nombre o DNI.
+3. Registra un cliente de prueba y edita sus datos. Detén la aplicación y vuelve a ejecutarla: los cambios permanecen. Puedes confirmarlos con `SELECT * FROM Clientes` en SSMS.
+4. Desactiva y reactiva ese cliente. El cajero puede consultar los datos; solo el administrador puede modificarlos.
+
+**Alcance de esta etapa:** el registro de nuevos fiados y abonos queda temporalmente deshabilitado en modo SQL hasta migrar ventas y pagos. Las pantallas lo indican y la API también rechaza esas operaciones antes de cambiar stock o saldos. Así se evita registrar movimientos temporales sobre clientes reales de la base. La consulta de saldos e historial sí funciona. Las ventas en efectivo o digitales siguen siendo prácticas en memoria; los reportes aún corresponden a esos movimientos temporales. No ejecutes nuevamente los scripts ni vacíes las tablas.
 
 ## Funciones disponibles
 
@@ -70,7 +83,9 @@ El modo `Persistencia:Usuarios=Memoria` se conserva **solo como selección expl�
 
 - `Models/TiendaModels.cs`: productos, clientes, ventas, detalles, pagos, compras y solicitudes.
 - `Services/TiendaService.cs`: reglas de negocio y almacenamiento temporal compartido por la aplicación.
-- `Services/GestionService.cs`: segunda parte del mismo servicio para clientes y proveedores.
+- `Services/GestionService.cs`: segunda parte del mismo servicio para clientes y proveedores; delega clientes a SQL cuando está configurado.
+- `Services/ClientesSqlService.cs`: persistencia de clientes y consulta de sus saldos e historial.
+- `Services/ClientesValidacion.cs`: validación de DNI y campos de clientes, compartida por SQL y las pruebas en memoria.
 - `Datos/ConexionBD.cs`: Singleton que configura y crea conexiones a SQL Server.
 - `Services/IUsuariosService.cs`: contrato común de cuentas y sesiones.
 - `Services/UsuariosSqlService.cs`: cuentas, contraseñas y validación de sesiones persistidas.
@@ -80,7 +95,7 @@ El modo `Persistencia:Usuarios=Memoria` se conserva **solo como selección expl�
 - `Views/Home`: pantallas MVC.
 - `wwwroot/js/site.js`: presenta las respuestas de C# y envía las operaciones.
 
-**Etapa actual:** el inicio de sesión, la validación de sesiones y la gestión de usuarios usan SQL Server. Productos, clientes, proveedores, ventas, compras, abonos y reportes todavía usan TiendaService en memoria; sus pantallas aún no muestran los 120 productos ni los movimientos cargados en SQL. Esos módulos se conectarán en la siguiente etapa. Reiniciar conserva las cuentas de SQL, cierra las sesiones y restablece los movimientos de práctica en memoria. La referencia de pago digital se confirma manualmente; no existe integración con Yape o Plin.
+**Etapa actual:** el inicio de sesión, la validación de sesiones, la gestión de usuarios y la gestión de clientes usan SQL Server. Clientes muestra las personas, deudas e historial de pagos cargados en SQL. Productos, proveedores, ventas, compras y reportes todavía usan TiendaService en memoria; sus pantallas aún no muestran los 120 productos ni el historial de ventas o compras cargado en SQL. Los nuevos fiados y abonos se habilitarán al completar esa migración. Reiniciar conserva las cuentas y clientes de SQL, cierra las sesiones y restablece los movimientos de práctica en memoria. La referencia de pago digital se confirma manualmente; no existe integración con Yape o Plin.
 
 La exportación PDF usa QuestPDF 2026.9.1 con licencia Community para este proyecto académico. Visual Studio restaura el paquete NuGet al compilar por primera vez; después la generación se realiza localmente.
 
@@ -101,4 +116,4 @@ GitHub Actions compila el proyecto y ejecuta las comprobaciones en cada actualiz
 
 ## Pruebas con SQL Server
 
-El flujo `verificar-sql.yml` crea un SQL Server 2022 temporal, ejecuta los dos scripts completos, comprueba los hashes de las cuentas con PasswordHasher de .NET y prueba el Singleton, persistencia, bloqueos, permisos y operaciones HTTP. Las claves del contenedor y de las cuentas se generan al ejecutar CI; no se almacenan en el repositorio. La autenticación SQL del contenedor solo se usa en CI; la configuración local sigue usando Windows. La conexión a localhost debe comprobarse desde ese equipo.
+El flujo `verificar-sql.yml` crea un SQL Server 2022 temporal, ejecuta los dos scripts completos, comprueba los hashes de las cuentas con PasswordHasher de .NET y prueba el Singleton, persistencia, bloqueos, permisos y operaciones HTTP. Para clientes comprueba DNI único ante concurrencia, conservación de deuda e historial, filtros, permisos y protección antifalsificación; además reinicia el servidor web para comprobar la persistencia de una edición y baja, y prueba la reactivación. Las claves del contenedor y de las cuentas se generan al ejecutar CI; no se almacenan en el repositorio. La autenticación SQL del contenedor solo se usa en CI; la configuración local sigue usando Windows. La conexión a localhost debe comprobarse desde ese equipo.
