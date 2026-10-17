@@ -1,6 +1,6 @@
 @inject Tienda_Giovanna.Services.TiendaService Tienda
 @{ ViewData["Title"] = "Reportes"; }
-<div class="page-heading"><div><p class="eyebrow">VENTAS Y REPORTES</p><h1>Historial de ventas</h1><p>Consulta un periodo y revisa el detalle de cada venta.</p></div></div>
+<div class="page-heading"><div><p class="eyebrow">VENTAS Y REPORTES</p><h1>Ventas y abonos</h1><p>Consulta un periodo, revisa sus movimientos y descarga el reporte.</p></div></div>
 @if (Tienda.VentasEnSql)
 {
     <p class="notice">El historial, los detalles y los totales de ventas se consultan desde la base de datos. Los abonos existentes y el stock bajo también se consultan en SQL Server.</p>
@@ -19,8 +19,9 @@ else if (Tienda.PagosPendientes)
 }
 <section class="card">
     <form id="formPeriodo"><div class="form-grid"><div><label for="fechaDesde">Desde</label><input id="fechaDesde" type="date" /></div><div><label for="fechaHasta">Hasta</label><input id="fechaHasta" type="date" /></div></div><div class="button-row"><button type="submit" class="primary">Consultar periodo</button><button type="button" id="limpiarPeriodo">Ver todas</button></div></form>
-    <div class="button-row"><button type="button" id="exportarCsv">Descargar CSV</button><button type="button" id="exportarPdf">Descargar PDF</button></div>
-    <p class="muted">Las fechas corresponden a la hora de Lima. Los abonos se muestran separados de las ventas al fiado. Las descargas utilizan las fechas seleccionadas.</p><p id="mensajeReportes" class="message" role="status"></p>
+    <div class="button-row"><button type="button" id="exportarCsv" disabled>Descargar CSV</button><button type="button" id="exportarPdf" disabled>Descargar PDF</button></div>
+    <p id="periodoReporte" class="muted" role="status">Consultando periodo...</p>
+    <p class="muted">Las fechas incluyen ambos días y corresponden a la hora de Lima. Después de cambiar las fechas, pulsa Consultar periodo para actualizar los datos y habilitar las descargas.</p><p id="mensajeReportes" class="message" role="status"></p>
 </section>
 <div class="stats spaced">
     <section class="card"><p>Ventas</p><strong id="reporteCantidad">0</strong></section>
@@ -28,6 +29,9 @@ else if (Tienda.PagosPendientes)
     <section class="card"><p>Cobrado en ventas</p><strong id="reporteCobrado">S/ 0.00</strong></section>
     <section class="card"><p>Ventas al fiado</p><strong id="reporteFiado">S/ 0.00</strong></section>
     <section class="card"><p>Abonos recibidos</p><strong id="reporteAbonos">S/ 0.00</strong></section>
+    <section class="card"><p>Cantidad de abonos</p><strong id="reporteCantidadAbonos">0</strong></section>
+    <section class="card"><p>Total cobrado del periodo</p><strong id="reporteTotalCobrado">S/ 0.00</strong><small>Ventas cobradas + abonos. Los fiados se excluyen.</small></section>
     <section class="card"><p>Productos con stock bajo actual</p><strong id="reporteStockBajo">0</strong></section>
 </div>
-<section class="card spaced"><div class="table-wrap"><table><thead><tr><th>N.º</th><th>Fecha</th><th>Cliente</th><th>Pago</th><th>Usuario</th><th>Total</th><th>Acción</th></tr></thead><tbody id="tablaVentas"></tbody></table></div></section>
+<section class="card spaced"><h2>Ventas del periodo</h2><div class="table-wrap"><table><thead><tr><th>N.º</th><th>Fecha</th><th>Cliente</th><th>Pago</th><th>Usuario</th><th>Total</th><th>Acción</th></tr></thead><tbody id="tablaVentas"></tbody></table></div></section>
+<section class="card spaced"><h2>Abonos del periodo</h2><p class="muted">El saldo restante corresponde al momento de cada pago.</p><div class="table-wrap"><table><thead><tr><th>N.º</th><th>Fecha</th><th>Cliente</th><th>Método</th><th>Abono</th><th>Saldo restante</th><th>Usuario</th></tr></thead><tbody id="tablaAbonosReporte"></tbody></table></div></section>

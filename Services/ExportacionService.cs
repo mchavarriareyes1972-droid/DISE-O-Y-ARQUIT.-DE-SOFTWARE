@@ -22,17 +22,17 @@ public class ExportacionService
     {
         var texto = new StringBuilder();
         void Fila(params string[] celdas) => texto.AppendLine(string.Join(';', celdas.Select(Celda)));
-        Fila("Tipo", "Número", "Fecha Lima", "Cliente", "Método", "Detalle", "Total vendido", "Cobrado en ventas", "Fiado", "Vuelto", "Abono", "Saldo restante");
+        Fila("Tipo", "Número", "Fecha Lima", "Cliente", "Método", "Detalle", "Total vendido", "Cobrado en ventas", "Fiado", "Vuelto", "Abono", "Saldo restante", "Usuario", "Total cobrado del periodo");
         foreach (Venta venta in reporte.Ventas)
         {
             string detalle = string.Join(" | ", venta.Detalles.Select(d => $"{d.Codigo} {d.Nombre} x{d.Cantidad} a S/ {Numero(d.PrecioUnitario)}"));
             Fila("Venta", venta.Id.ToString(), Fecha(venta.Fecha), venta.ClienteNombre ?? "Contado", venta.FormaPago, detalle,
-                Numero(venta.Total), Numero(venta.FormaPago == "Fiado" ? 0 : venta.Total), Numero(venta.FormaPago == "Fiado" ? venta.Total : 0), Numero(venta.Vuelto), "", "");
+                Numero(venta.Total), Numero(venta.FormaPago == "Fiado" ? 0 : venta.Total), Numero(venta.FormaPago == "Fiado" ? venta.Total : 0), Numero(venta.Vuelto), "", "", venta.UsuarioNombre ?? "Práctica", "");
         }
         foreach (Pago pago in reporte.Pagos)
-            Fila("Abono", pago.Id.ToString(), Fecha(pago.Fecha), pago.ClienteNombre, pago.Metodo, "", "", "", "", "", Numero(pago.Monto), Numero(pago.SaldoRestante));
+            Fila("Abono", pago.Id.ToString(), Fecha(pago.Fecha), pago.ClienteNombre, pago.Metodo, "", "", "", "", "", Numero(pago.Monto), Numero(pago.SaldoRestante), pago.UsuarioNombre ?? "Práctica", "");
         Fila("Resumen", "", "", "", "", $"Periodo: {reporte.Desde?.ToString("dd/MM/yyyy") ?? "inicio"} a {reporte.Hasta?.ToString("dd/MM/yyyy") ?? "actualidad"}",
-            Numero(reporte.TotalVendido), Numero(reporte.CobradoEnVentas), Numero(reporte.TotalFiado), "", Numero(reporte.Abonos), "");
+            Numero(reporte.TotalVendido), Numero(reporte.CobradoEnVentas), Numero(reporte.TotalFiado), "", Numero(reporte.Abonos), "", "", Numero(reporte.TotalCobrado));
         return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(texto.ToString())).ToArray();
     }
     public byte[] Pdf(ReporteVentas reporte)
@@ -53,24 +53,26 @@ public class ExportacionService
                 c.Spacing(10);
                 c.Item().Text($"Ventas: {reporte.CantidadVentas}  |  Total vendido: S/ {Numero(reporte.TotalVendido)}").Bold();
                 c.Item().Text($"Cobrado en ventas: S/ {Numero(reporte.CobradoEnVentas)}  |  Fiado: S/ {Numero(reporte.TotalFiado)}  |  Abonos: S/ {Numero(reporte.Abonos)}");
+                c.Item().Text($"Total cobrado del periodo: S/ {Numero(reporte.TotalCobrado)} | Abonos registrados: {reporte.CantidadAbonos}").Bold();
                 c.Item().Text("Los fiados no se suman al dinero cobrado. Los abonos se presentan por separado.").FontSize(9);
                 c.Item().Text("Ventas del periodo").Bold();
                 if (reporte.Ventas.Count == 0) c.Item().Text("No hay ventas en el periodo consultado.");
                 foreach (Venta venta in reporte.Ventas)
                 {
-                    c.Item().EnsureSpace(70).Column(v =>
+                    c.Item().EnsureSpace(125).Column(v =>
                     {
                         v.Item().Background("#edf5ee").Padding(6).Text($"Venta {venta.Id} | {Fecha(venta.Fecha)} | {venta.FormaPago} | {venta.ClienteNombre ?? "Contado"}").Bold();
+                        v.Item().Text("Usuario: " + (venta.UsuarioNombre ?? "Práctica")).FontSize(9);
                         foreach (DetalleVenta d in venta.Detalles)
                             v.Item().PaddingVertical(3).Text($"{d.Codigo} - {d.Nombre} | {d.Cantidad} x S/ {Numero(d.PrecioUnitario)} = S/ {Numero(d.Subtotal)}");
                         v.Item().Text($"Total: S/ {Numero(venta.Total)} | Recibido: S/ {Numero(venta.MontoRecibido)} | Vuelto: S/ {Numero(venta.Vuelto)}");
                         if (!string.IsNullOrEmpty(venta.ReferenciaPago)) v.Item().Text("Referencia digital: " + venta.ReferenciaPago);
                     });
                 }
-                c.Item().Text("Abonos del periodo").Bold();
+                c.Item().EnsureSpace(80).Text("Abonos del periodo").Bold();
                 if (reporte.Pagos.Count == 0) c.Item().Text("No hay abonos en el periodo consultado.");
                 foreach (Pago pago in reporte.Pagos)
-                    c.Item().Text($"Abono {pago.Id} | {Fecha(pago.Fecha)} | {pago.ClienteNombre} | {pago.Metodo} | S/ {Numero(pago.Monto)} | Saldo: S/ {Numero(pago.SaldoRestante)}");
+                    c.Item().EnsureSpace(45).Text($"Abono {pago.Id} | {Fecha(pago.Fecha)} | {pago.ClienteNombre} | {pago.Metodo} | S/ {Numero(pago.Monto)} | Saldo: S/ {Numero(pago.SaldoRestante)} | Usuario: {pago.UsuarioNombre ?? "Práctica"}");
                 c.Item().Text($"Productos activos con stock bajo actual: {reporte.ProductosStockBajo}. Este indicador corresponde al inventario actual.").FontSize(9);
             });
             pagina.Footer().AlignCenter().Text(t => { t.Span("Página "); t.CurrentPageNumber(); t.Span(" de "); t.TotalPages(); });

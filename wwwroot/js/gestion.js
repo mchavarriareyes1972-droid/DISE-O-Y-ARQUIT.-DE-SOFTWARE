@@ -104,22 +104,25 @@ async function iniciarUsuarios() {
     });
 }
 async function descargarReporte(formato) {
-    const control = $(formato === 'csv' ? 'exportarCsv' : 'exportarPdf'); control.disabled = true;
+    if (!coincidePeriodoReporte() || consultasReportePendientes || descargasReportePendientes) {
+        mensaje('mensajeReportes', 'Consulta primero el periodo que deseas descargar.', true); return;
+    }
+    const filtros = { ...filtrosReporteConsultado };
+    descargasReportePendientes++; actualizarDescargasReporte();
     try {
-        const parametros = new URLSearchParams();
-        if ($('fechaDesde').value) parametros.set('desde', $('fechaDesde').value);
-        if ($('fechaHasta').value) parametros.set('hasta', $('fechaHasta').value);
-        const respuesta = await fetch(baseApi + `reporte/exportar/${formato}?` + parametros, { credentials: 'same-origin', cache: 'no-store' });
+        const respuesta = await fetch(baseApi + `reporte/exportar/${formato}?` + parametrosReporte(filtros), { credentials: 'same-origin', cache: 'no-store' });
         if (!respuesta.ok) {
             if (respuesta.status === 401) location.assign(document.body.dataset.loginUrl);
             const error = await respuesta.json().catch(() => null);
             throw new Error(error?.mensaje || 'No se pudo descargar el reporte. Revisa las fechas.');
         }
         const url = URL.createObjectURL(await respuesta.blob());
-        const enlace = document.createElement('a'); enlace.href = url; enlace.download = `Ventas_Giovanna.${formato}`;
+        const enlace = document.createElement('a'); enlace.href = url;
+        enlace.download = `Ventas_Giovanna_${filtros.desde || 'inicio'}_${filtros.hasta || 'actualidad'}.${formato}`;
         document.body.append(enlace); enlace.click(); enlace.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-        mensaje('mensajeReportes', 'Reporte descargado con las fechas seleccionadas.');
+        mensaje('mensajeReportes', 'Reporte descargado del periodo consultado.');
     } catch (e) { mensaje('mensajeReportes', e.message, true); }
-    finally { control.disabled = false; }
+    finally { descargasReportePendientes--; actualizarDescargasReporte(); }
 }
+
 iniciar();

@@ -303,7 +303,8 @@ public partial class TiendaService
         {
             ValidarPeriodo(desde, hasta);
             var filtradas = ConsultarVentas(desde, hasta);
-            var pagosFiltrados = ConsultarPagos(null).Where(p => EnPeriodo(p.Fecha, desde, hasta)).ToList();
+            var pagosFiltrados = pagosSql?.ConsultarPagos(null, desde, hasta)
+                ?? ConsultarPagos(null).Where(p => EnPeriodo(p.Fecha, desde, hasta)).ToList();
             return new ReporteVentas { Desde = desde, Hasta = hasta, Generado = reloj(), CantidadVentas = filtradas.Count, TotalVendido = filtradas.Sum(v => v.Total),
                 TotalFiado = filtradas.Where(v => v.FormaPago == "Fiado").Sum(v => v.Total),
                 CobradoEnVentas = filtradas.Where(v => v.FormaPago != "Fiado").Sum(v => v.Total),

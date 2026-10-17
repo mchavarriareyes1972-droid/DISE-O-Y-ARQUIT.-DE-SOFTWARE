@@ -373,27 +373,66 @@ async function detalleVenta(id) {
         abrirDetalle('Detalle de venta N.º ' + venta.id, contenido);
     } catch (e) { mensaje('mensajeReportes', e.message, true); }
 }
-async function renderReporte() {
+let filtrosReporteConsultado = null;
+let revisionReporte = 0, consultasReportePendientes = 0, descargasReportePendientes = 0;
+function filtrosReporteActuales() {
+    return { desde: $('fechaDesde').value, hasta: $('fechaHasta').value };
+}
+function parametrosReporte(filtros) {
     const parametros = new URLSearchParams();
-    if ($('fechaDesde').value) parametros.set('desde', $('fechaDesde').value);
-    if ($('fechaHasta').value) parametros.set('hasta', $('fechaHasta').value);
-    const reporte = await api('reporte?' + parametros);
-    $('reporteCantidad').textContent = reporte.cantidadVentas;
-    $('reporteTotal').textContent = dinero(reporte.totalVendido);
-    $('reporteCobrado').textContent = dinero(reporte.cobradoEnVentas);
-    $('reporteFiado').textContent = dinero(reporte.totalFiado);
-    $('reporteAbonos').textContent = dinero(reporte.abonos);
-    $('reporteStockBajo').textContent = reporte.productosStockBajo;
-    tabla('tablaVentas', reporte.ventas, 7, v => [v.id, fecha(v.fecha), v.clienteNombre || 'Contado', v.formaPago, v.usuarioNombre || 'Práctica', dinero(v.total), boton('Ver detalle', () => detalleVenta(v.id))]);
-    mensaje('mensajeReportes', reporte.cantidadVentas + ' venta(s) en el periodo consultado.');
+    if (filtros.desde) parametros.set('desde', filtros.desde);
+    if (filtros.hasta) parametros.set('hasta', filtros.hasta);
+    return parametros;
+}
+function coincidePeriodoReporte(filtros = filtrosReporteConsultado) {
+    const actuales = filtrosReporteActuales();
+    return filtros && filtros.desde === actuales.desde && filtros.hasta === actuales.hasta;
+}
+function actualizarDescargasReporte() {
+    const bloqueado = !coincidePeriodoReporte() || consultasReportePendientes > 0 || descargasReportePendientes > 0;
+    $('exportarCsv').disabled = bloqueado; $('exportarPdf').disabled = bloqueado;
+}
+async function renderReporte() {
+    const filtros = filtrosReporteActuales();
+    if (filtros.desde && filtros.hasta && filtros.desde > filtros.hasta)
+        throw new Error('La fecha inicial no puede ser posterior a la final.');
+    const revision = ++revisionReporte;
+    consultasReportePendientes++; actualizarDescargasReporte();
+    try {
+        const reporte = await api('reporte?' + parametrosReporte(filtros));
+        // Una consulta lenta no debe reemplazar el periodo que se eligio despues.
+        if (revision !== revisionReporte || !coincidePeriodoReporte(filtros)) return;
+        $('reporteCantidad').textContent = reporte.cantidadVentas;
+        $('reporteTotal').textContent = dinero(reporte.totalVendido);
+        $('reporteCobrado').textContent = dinero(reporte.cobradoEnVentas);
+        $('reporteFiado').textContent = dinero(reporte.totalFiado);
+        $('reporteAbonos').textContent = dinero(reporte.abonos);
+        $('reporteCantidadAbonos').textContent = reporte.cantidadAbonos;
+        $('reporteTotalCobrado').textContent = dinero(reporte.totalCobrado);
+        $('reporteStockBajo').textContent = reporte.productosStockBajo;
+        tabla('tablaVentas', reporte.ventas, 7, v => [v.id, fecha(v.fecha), v.clienteNombre || 'Contado', v.formaPago, v.usuarioNombre || 'Práctica', dinero(v.total), boton('Ver detalle', () => detalleVenta(v.id))]);
+        tabla('tablaAbonosReporte', reporte.pagos, 7, p => [p.id, fecha(p.fecha), p.clienteNombre, p.metodo, dinero(p.monto), dinero(p.saldoRestante), p.usuarioNombre || 'Práctica']);
+        filtrosReporteConsultado = filtros;
+        const dia = valor => valor.split('-').reverse().join('/');
+        $('periodoReporte').textContent = `Periodo consultado: ${filtros.desde ? dia(filtros.desde) : 'Inicio'} a ${filtros.hasta ? dia(filtros.hasta) : 'Actualidad'} (hora de Lima). Actualizado: ${fecha(reporte.generado)}.`;
+        mensaje('mensajeReportes', `${reporte.cantidadVentas} venta(s) y ${reporte.cantidadAbonos} abono(s) en el periodo consultado.`);
+    } catch (error) { if (revision === revisionReporte) throw error; }
+    finally { consultasReportePendientes--; actualizarDescargasReporte(); }
 }
 async function iniciarReportes() {
-    await renderReporte(); formulario('formPeriodo', 'mensajeReportes', renderReporte);
+    formulario('formPeriodo', 'mensajeReportes', renderReporte);
+    const fechasModificadas = () => {
+        revisionReporte++; actualizarDescargasReporte();
+        mensaje('mensajeReportes', coincidePeriodoReporte() ? 'Las fechas coinciden con el periodo mostrado.' : 'Fechas modificadas. Pulsa Consultar periodo para actualizar el reporte.');
+    };
+    $('fechaDesde').addEventListener('input', fechasModificadas);
+    $('fechaHasta').addEventListener('input', fechasModificadas);
     $('limpiarPeriodo').addEventListener('click', () => {
         $('formPeriodo').reset(); renderReporte().catch(e => mensaje('mensajeReportes', e.message, true));
     });
     $('exportarCsv').addEventListener('click', () => descargarReporte('csv'));
     $('exportarPdf').addEventListener('click', () => descargarReporte('pdf'));
+    await renderReporte();
 }
 
 async function iniciar() {

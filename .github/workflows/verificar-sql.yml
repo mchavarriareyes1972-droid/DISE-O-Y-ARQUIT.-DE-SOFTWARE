@@ -32,6 +32,7 @@ jobs:
         run: |
           npm install --prefix /tmp/giovanna-ui --no-save playwright@1.62.1
           /tmp/giovanna-ui/node_modules/.bin/playwright install --with-deps chromium
+          sudo apt-get install -y poppler-utils
       - name: Probar la aplicacion HTTP usando usuarios de SQL Server
         env:
           NODE_PATH: /tmp/giovanna-ui/node_modules
@@ -51,6 +52,8 @@ jobs:
           node tests/browser_compras_sql.cjs
           node tests/browser_ventas_sql.cjs
           node tests/browser_pagos_sql.cjs
+          node tests/browser_reportes_sql.cjs
+          python3 tests/reportes_http_checks.py
       - name: Reporte de la aplicacion
         if: always()
         uses: actions/upload-artifact@v4

@@ -47,6 +47,8 @@ public class ReporteVentas
     public decimal TotalFiado { get; set; }
     public decimal CobradoEnVentas { get; set; }
     public decimal Abonos { get; set; }
+    public int CantidadAbonos => Pagos.Count;
+    public decimal TotalCobrado => CobradoEnVentas + Abonos;
     public int ProductosStockBajo { get; set; }
     public List<Venta> Ventas { get; set; } = new();
     public List<Pago> Pagos { get; set; } = new();

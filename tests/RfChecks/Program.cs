@@ -166,6 +166,10 @@ string csv = System.Text.Encoding.UTF8.GetString(exportacion.Csv(reporteExportar
 Verificar(csv.Contains("Resumen") && csv.Contains("Abono") && csv.Contains("Cliente de prueba"), "CSV incluye ventas, abonos e historial.");
 var peligroso = new ReporteVentas { Ventas = new() { new() { Id = 1, Fecha = DateTimeOffset.UtcNow, ClienteNombre = "=1+1", FormaPago = "Fiado" } } };
 Verificar(System.Text.Encoding.UTF8.GetString(exportacion.Csv(peligroso)).Contains("'=1+1"), "El CSV neutraliza fórmulas ingresadas como texto.");
+Verificar(reporteExportar.CantidadAbonos == reporteExportar.Pagos.Count && reporteExportar.TotalCobrado == reporteExportar.CobradoEnVentas + reporteExportar.Abonos, "Reporte separa cantidades de abonos y total cobrado sin sumar fiados.");
+var usuarioCsv = new ReporteVentas { Pagos = new() { new() { Id=1, Fecha=DateTimeOffset.UtcNow, ClienteNombre="Cliente; con \"comillas\" y salto\nsegunda linea", UsuarioNombre="=OPERADOR()", Metodo="Digital", Monto=1, SaldoRestante=0 } }, Abonos=1 };
+string csvUsuario = System.Text.Encoding.UTF8.GetString(exportacion.Csv(usuarioCsv));
+Verificar(csvUsuario.Contains("'=OPERADOR()") && csvUsuario.Contains("Usuario") && csvUsuario.Contains("Total cobrado del periodo"), "CSV incluye usuario, neutraliza formulas del operador y agrega total cobrado.");
 byte[] pdf = exportacion.Pdf(reporteExportar);
 Verificar(System.Text.Encoding.ASCII.GetString(pdf, 0, 5) == "%PDF-", "Generar un PDF real.");
 string salida = Path.Combine(Path.GetTempPath(), "giovanna-qa"); Directory.CreateDirectory(salida);

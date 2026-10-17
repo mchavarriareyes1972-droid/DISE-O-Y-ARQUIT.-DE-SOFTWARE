@@ -10,7 +10,7 @@ public sealed class PagosSqlService
     private readonly ConexionBD conexion;
     public PagosSqlService(ConexionBD conexion) { this.conexion = conexion; }
 
-    internal static List<Pago> Consultar(SqlConnection c, SqlTransaction? tx, int? clienteId = null, int? id = null)
+    internal static List<Pago> Consultar(SqlConnection c, SqlTransaction? tx, int? clienteId = null, int? id = null, DateOnly? desde = null, DateOnly? hasta = null)
     {
         // Al recuperar el pago recien insertado, buscar por su clave evita
         // escanear pagos pendientes de otras transacciones.
@@ -20,10 +20,14 @@ public sealed class PagosSqlService
                    p.SaldoRestante, p.IdUsuario, u.Nombre
             FROM Pagos p INNER JOIN Usuarios u ON u.IdUsuario = p.IdUsuario
             WHERE {filtro}
+              AND (@desde IS NULL OR CONVERT(date, SWITCHOFFSET(p.Fecha, '-05:00')) >= @desde)
+              AND (@hasta IS NULL OR CONVERT(date, SWITCHOFFSET(p.Fecha, '-05:00')) <= @hasta)
             ORDER BY p.IdPago DESC
             """, c, tx);
         cmd.Parameters.Add("@cliente", SqlDbType.Int).Value = (object?)clienteId ?? DBNull.Value;
         cmd.Parameters.Add("@id", SqlDbType.Int).Value = (object?)id ?? DBNull.Value;
+        cmd.Parameters.Add("@desde", SqlDbType.Date).Value = desde.HasValue ? desde.Value.ToDateTime(TimeOnly.MinValue) : DBNull.Value;
+        cmd.Parameters.Add("@hasta", SqlDbType.Date).Value = hasta.HasValue ? hasta.Value.ToDateTime(TimeOnly.MinValue) : DBNull.Value;
         using var lector = cmd.ExecuteReader();
         var pagos = new List<Pago>();
         while (lector.Read()) pagos.Add(new()
@@ -35,10 +39,12 @@ public sealed class PagosSqlService
         return pagos;
     }
 
-    public List<Pago> ConsultarPagos(int? clienteId)
+    public List<Pago> ConsultarPagos(int? clienteId, DateOnly? desde = null, DateOnly? hasta = null)
     {
+        if (desde.HasValue && hasta.HasValue && desde > hasta)
+            throw new ArgumentException("La fecha inicial no puede ser posterior a la final.");
         using var c = conexion.CrearConexion(); c.Open();
-        return Consultar(c, null, clienteId);
+        return Consultar(c, null, clienteId, desde: desde, hasta: hasta);
     }
 
     public Pago RegistrarPago(PagoSolicitud solicitud, int usuarioId)

@@ -520,6 +520,8 @@ try
     Verificar(reporteAbonos.Abonos == 90 && reporteAbonos.TotalFiado == 90 && reporteAbonos.CobradoEnVentas == 0 && reporteAbonos.Pagos.Count == 9, "Reporte separa abonos nuevos de fiados sin duplicar el dinero cobrado.");
     SqlCompraPrueba($"UPDATE Pagos SET Fecha='2002-01-02T04:59:59+00:00' WHERE IdPago={efectivoAbono.Id}; UPDATE Pagos SET Fecha='2002-01-02T05:00:00+00:00' WHERE IdPago={digitalAbono.Id}");
     Verificar(tiendaPagos.Reporte(new(2002,1,1),new(2002,1,1)).Abonos == 10 && tiendaPagos.Reporte(new(2002,1,2),new(2002,1,2)).Abonos == 1.24m, "Reporte filtra abonos por los limites de medianoche de Lima.");
+    var soloAbonos = tiendaPagos.Reporte(new(2002,1,1),new(2002,1,1));
+    Verificar(soloAbonos.CantidadVentas == 0 && soloAbonos.CantidadAbonos == 1 && soloAbonos.TotalCobrado == 10 && soloAbonos.Pagos.Single().Id == efectivoAbono.Id, "Un periodo con solo abonos muestra el cobro aunque no existan ventas de ese dia.");
     clientesSql.CambiarEstadoCliente(clienteAbono.Id, new() { Activo = true });
     NuevoFiadoAbono();
     ventasSql.RegistrarVenta(new() { FormaPago = "Fiado", ClienteId = clienteOtroAbono.Id, Items = new() { new() { ProductoId = articuloAbono.Id, Cantidad = 1 } } }, 2);
@@ -532,4 +534,36 @@ finally
     SqlCompraPrueba($"DELETE FROM Pagos WHERE IdCliente IN ({clienteAbono.Id},{clienteOtroAbono.Id}); DELETE FROM DetalleVentas WHERE IdVenta IN (SELECT IdVenta FROM Ventas WHERE IdCliente IN ({clienteAbono.Id},{clienteOtroAbono.Id})); DELETE FROM Ventas WHERE IdCliente IN ({clienteAbono.Id},{clienteOtroAbono.Id}); DELETE FROM Productos WHERE IdProducto={articuloAbono.Id}; DELETE FROM Clientes WHERE IdCliente IN ({clienteAbono.Id},{clienteOtroAbono.Id}); DELETE FROM Usuarios WHERE IdUsuario={usuarioAbono.Id}");
 }
 Verificar(tiendaPagos.ConsultarPagos(null).Count == 124 && ventasSql.ConsultarVentas(null,null).Count == 931 && productosSql.BuscarProductos(null,true).Count == 120 && clientesSql.ConsultarClientes(true).Count == 60, "Pruebas de abonos conservan los datos originales de la base temporal.");
+
+// Contrastar el reporte con agregados independientes de las tablas SQL.
+foreach (var periodo in new (DateOnly? Desde, DateOnly? Hasta)[]
+{
+    (null,null), (new(2026,9,17),new(2026,10,16)), (new(2026,9,17),new(2026,9,17)),
+    (new(2026,10,16),new(2026,10,16)), (new(2026,10,1),null), (null,new(2026,9,18)),
+    (new(2000,1,1),new(2000,1,1))
+})
+{
+    ReporteVentas reporteSql = tiendaPagos.Reporte(periodo.Desde, periodo.Hasta);
+    using var c = ConexionBD.Instancia.CrearConexion(); c.Open();
+    using var cmd = new SqlCommand("""
+        SELECT COUNT(*), COALESCE(SUM(Total),0),
+               COALESCE(SUM(CASE WHEN FormaPago=N'Fiado' THEN Total ELSE 0 END),0),
+               COALESCE(SUM(CASE WHEN FormaPago<>N'Fiado' THEN Total ELSE 0 END),0)
+        FROM Ventas WHERE (@desde IS NULL OR CONVERT(date,SWITCHOFFSET(Fecha,'-05:00'))>=@desde)
+          AND (@hasta IS NULL OR CONVERT(date,SWITCHOFFSET(Fecha,'-05:00'))<=@hasta);
+        SELECT COUNT(*), COALESCE(SUM(Monto),0) FROM Pagos
+        WHERE (@desde IS NULL OR CONVERT(date,SWITCHOFFSET(Fecha,'-05:00'))>=@desde)
+          AND (@hasta IS NULL OR CONVERT(date,SWITCHOFFSET(Fecha,'-05:00'))<=@hasta);
+        """, c);
+    cmd.Parameters.Add("@desde",System.Data.SqlDbType.Date).Value = periodo.Desde.HasValue ? periodo.Desde.Value.ToDateTime(TimeOnly.MinValue) : DBNull.Value;
+    cmd.Parameters.Add("@hasta",System.Data.SqlDbType.Date).Value = periodo.Hasta.HasValue ? periodo.Hasta.Value.ToDateTime(TimeOnly.MinValue) : DBNull.Value;
+    using var lector = cmd.ExecuteReader(); lector.Read();
+    Verificar(reporteSql.CantidadVentas == lector.GetInt32(0) && reporteSql.TotalVendido == lector.GetDecimal(1) && reporteSql.TotalFiado == lector.GetDecimal(2) && reporteSql.CobradoEnVentas == lector.GetDecimal(3), "Reporte de ventas coincide con agregados SQL para periodo completo, limites inclusivos o rango vacio.");
+    lector.NextResult(); lector.Read();
+    Verificar(reporteSql.CantidadAbonos == lector.GetInt32(0) && reporteSql.Abonos == lector.GetDecimal(1) && reporteSql.TotalCobrado == reporteSql.CobradoEnVentas + lector.GetDecimal(1), "Reporte de abonos y total cobrado coinciden con SQL sin sumar fiados dos veces.");
+    Verificar(reporteSql.Ventas.Sum(v => v.Detalles.Sum(d => d.Subtotal)) == reporteSql.TotalVendido && reporteSql.Pagos.All(p => p.UsuarioId > 0), "Detalles y usuarios del reporte corresponden a movimientos SQL.");
+}
+Rechazar(() => pagosSql.ConsultarPagos(null,new(2026,10,17),new(2026,10,16)), "Filtro SQL de abonos rechaza fechas invertidas.");
+var reporteSinMovimientos = tiendaPagos.Reporte(new(2000,1,1),new(2000,1,1));
+Verificar(reporteSinMovimientos.CantidadVentas == 0 && reporteSinMovimientos.CantidadAbonos == 0 && reporteSinMovimientos.TotalCobrado == 0 && reporteSinMovimientos.ProductosStockBajo == 7, "Periodo vacio muestra cero movimientos y mantiene el indicador de inventario actual.");
 Console.WriteLine($"{comprobaciones} comprobaciones SQL correctas.");
