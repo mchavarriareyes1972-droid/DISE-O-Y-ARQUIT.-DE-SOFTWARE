@@ -1,13 +1,4 @@
-﻿-- BODEGA GIOVANNA - CARGA FICTICIA DE UN MES
--- Periodo: 17/09/2026 al 16/10/2026. Moneda: soles. Hora de Lima.
--- Ejecutar COMPLETO con F5 DESPUES de crear las 11 tablas y 3 vistas.
--- Solo para una base de practica VACIA. Si ya tiene registros, se detiene.
--- No elimina, reemplaza ni duplica datos existentes.
--- Los nombres, documentos, RUC, contactos y precios son datos ficticios.
--- Solo 2 cuentas de practica: admin / Giovanna2026! ; cajero / Cajero2026!
--- PasswordHash contiene hashes Identity V3; no se guardan contrasenas en texto plano.
--- El proyecto C# aun debe conectarse a SQL Server para utilizar estas filas.
--- IDENTITY_INSERT permite asignar identificadores explicitos a este conjunto de prueba.
+
 USE BodegaGiovanna;
 GO
 SET NOCOUNT ON;
