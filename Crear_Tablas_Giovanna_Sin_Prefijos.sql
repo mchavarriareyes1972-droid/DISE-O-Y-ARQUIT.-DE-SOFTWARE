@@ -1,9 +1,3 @@
-﻿-- BODEGA GIOVANNA - MICROSOFT SQL SERVER
--- Solo estructura: crear la base, las 11 tablas y las 3 vistas.
--- No incluye INSERT ni datos de ejemplo.
--- SQL Server puede mostrar el esquema predeterminado en su explorador.
--- Ejecutar una sola vez en una instancia donde BodegaGiovanna no exista.
--- Si ya ejecutaste el script anterior, las tablas ya estan creadas.
 
 -- CREAR Y SELECCIONAR LA BASE DE DATOS
 CREATE DATABASE BodegaGiovanna;
