@@ -7,7 +7,7 @@
 }
 @if (Tienda.PagosEnSql)
 {
-    <p class="notice" role="status">Los abonos se guardan en la base de datos y reducen la deuda del cliente. El historial conserva la fecha, el usuario y el saldo restante. También puedes cobrar deudas de clientes inactivos.</p>
+    
 }
 <section class="card"><label for="buscarCliente">Buscar por nombre o DNI</label><input id="buscarCliente" type="search" /><div class="table-wrap"><table><thead><tr><th>DNI</th><th>Cliente</th><th>Teléfono</th><th>Dirección</th><th>Deuda</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="tablaClientes"></tbody></table></div><p class="muted">Desactivar un cliente conserva su deuda y su historial.</p></section>
 <section class="card spaced"><h2>Registrar pago</h2>
