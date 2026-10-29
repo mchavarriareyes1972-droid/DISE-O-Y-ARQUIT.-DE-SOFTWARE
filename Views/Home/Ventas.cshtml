@@ -1,4 +1,41 @@
+@inject Tienda_Giovanna.Services.TiendaService Tienda
 @{ ViewData["Title"] = "Ventas"; }
-<div class="page-heading"><div><p class="eyebrow">PUNTO DE VENTA</p><h1>Registrar venta</h1><p>Busca productos, agrega cantidades y selecciona el pago.</p></div></div>
-<div class="two-columns"><section class="card"><div class="section-head"><h2>Productos</h2><span>Catálogo de ejemplo</span></div><label for="buscarProducto">Buscar producto</label><input id="buscarProducto" type="search" placeholder="Nombre del producto" /><div id="listaProductos"></div></section>
-<section class="card"><div class="section-head"><h2>Venta actual</h2></div><div id="detalleVenta"></div><div class="total-row"><strong>Total</strong><strong id="totalVenta">S/ 0.00</strong></div><label for="formaPago">Forma de pago</label><select id="formaPago"><option value="Efectivo">Efectivo</option><option value="Digital">Yape / Plin</option><option value="Fiado">Fiado</option></select><div id="campoEfectivo"><label for="montoRecibido">Monto recibido (S/)</label><input id="montoRecibido" type="number" min="0" step="0.01" placeholder="0.00" /><p id="vuelto">Vuelto: S/ 0.00</p></div><div id="campoFiado" hidden><label for="clienteFiado">Cliente</label><select id="clienteFiado"></select></div><button class="primary full" id="finalizarVenta" type="button">Finalizar venta</button><p class="message" id="mensajeVenta" role="status"></p></section></div>
+<div class="page-heading"><div><p class="eyebrow">PUNTO DE VENTA</p><h1>Registrar venta</h1><p>Busca por nombre o código y selecciona la forma de pago.</p></div></div>
+@if (Tienda.VentasPendientes)
+{
+    <p class="notice" role="status">@Tienda_Giovanna.Services.TiendaService.StockPendiente</p>
+}
+<div class="two-columns">
+    <section class="card">
+        <h2>Productos</h2>
+        <label for="buscarProducto">Buscar producto</label>
+        <input id="buscarProducto" type="search" placeholder="Ejemplo: arroz o P001" />
+        <div id="listaProductos"></div>
+    </section>
+    <section class="card">
+        <h2>Venta actual</h2>
+        <div id="detalleVenta"></div>
+        <div class="total-row"><strong>Total</strong><strong id="totalVenta">S/ 0.00</strong></div>
+        <form id="formVenta">
+            <label for="formaPago">Forma de pago</label>
+            <select id="formaPago"><option>Efectivo</option><option value="Digital">Yape / Plin</option><option disabled="@Tienda.FiadosPendientes">Fiado</option></select>
+            @if (Tienda.FiadosPendientes)
+            {
+                <p class="muted">El registro de nuevos fiados está pendiente de completar la conexión de ventas.</p>
+            }
+            <div id="campoEfectivo">
+                <label for="montoRecibido">Monto recibido (S/)</label>
+                <input id="montoRecibido" type="number" min="0" step="0.01" value="0" />
+                <p id="vuelto">Vuelto: S/ 0.00</p>
+            </div>
+            <div id="campoDigital" hidden>
+                <label for="referenciaPago">Referencia del pago confirmado</label>
+                <input id="referenciaPago" maxlength="100" placeholder="Número de operación" />
+                <small>Verifica la recepción del pago antes de finalizar.</small>
+            </div>
+            <div id="campoFiado" hidden><label for="clienteFiado">Cliente</label><select id="clienteFiado"></select></div>
+            <button class="primary full" type="submit" disabled="@Tienda.VentasPendientes" data-bloqueado="@Tienda.VentasPendientes.ToString().ToLowerInvariant()">Finalizar venta</button>
+        </form>
+        <p class="message" id="mensajeVenta" role="status"></p>
+    </section>
+</div>

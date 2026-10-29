@@ -1,0 +1,11 @@
+BODEGA GIOVANNA - C# MVC Y SQL SERVER
+
+Abre Tienda_Giovanna.sln con Visual Studio y ejecuta con F5. Se necesita .NET 8.
+Servidor configurado: localhost. Base: BodegaGiovanna. Autenticacion de Windows.
+Administrador: admin, con la clave cargada en tu base.
+Un solo cajero: cajero, con la clave cargada en tu base.
+
+La base y sus datos ya cargados se conservan: no repitas los scripts.
+Ahora el inicio de sesion y la gestion de usuarios usan SQL Server mediante Singleton.
+Los demas modulos todavia usan datos en memoria y se conectaran despues.
+Consulta README.md para la configuracion, arquitectura y pasos de comprobacion.
