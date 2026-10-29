@@ -3,8 +3,7 @@
 <div class="page-heading"><div><p class="eyebrow">ABASTECIMIENTO</p><h1>Compras</h1><p>Registra varios productos recibidos de un proveedor.</p><p id="cantidadCompras" class="muted" role="status"></p></div></div>
 @if (Tienda.ComprasEnSql)
 {
-    <p class="notice">Las compras, sus detalles y el aumento de existencias se guardan juntos en la base de datos. El usuario se toma de tu sesión y los registros se conservan al cerrar el programa.</p>
-}
+    
 else if (Tienda.ComprasPendientes)
 {
     <p class="notice">El registro de compras está pendiente de conexión a la base de datos.</p>
