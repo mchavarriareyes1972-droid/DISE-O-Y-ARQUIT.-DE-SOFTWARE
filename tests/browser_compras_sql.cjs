@@ -64,6 +64,14 @@ const fs = require('node:fs');
             await fila.waitFor();
             assert.equal(await fila.locator('td').nth(3).innerText(), stock);
         }
+        await page.locator('#tablaInventario tr').first().getByRole('button', { name: 'Ver historial', exact: true }).click();
+        await page.locator('#dialogoDocumento table tbody tr').first().waitFor();
+        assert((await page.locator('#dialogoDocumento').innerText()).includes('Compra'));
+        await page.locator('#historialTipo').selectOption('Compra');
+        await page.locator('#dialogoDocumento').getByRole('button', { name: 'Consultar', exact: true }).click();
+        await page.locator('#dialogoDocumento button[type=submit]:enabled').waitFor();
+        assert(await page.locator('#dialogoDocumento table tbody tr').count() > 0);
+        await page.locator('#dialogoDocumento').getByRole('button', { name: 'Cerrar', exact: true }).click();
         await page.goto(base + '/Home/Compras'); await page.locator('#nuevaCompra').click(); await texto('cantidadCompras', 'Compras registradas: 62'); await page.locator('#cerrarCompra').click();
         fs.mkdirSync('/tmp/giovanna-qa', { recursive: true });
         await page.screenshot({ path: '/tmp/giovanna-qa/compras-sql.png', fullPage: true });

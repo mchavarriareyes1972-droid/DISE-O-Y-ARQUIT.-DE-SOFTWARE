@@ -21,6 +21,8 @@ public partial class TiendaService
     public bool FiadosPendientes => ClientesEnSql && !VentasEnSql;
     public bool ClientesEnSql => clientesSql != null;
     public bool ProveedoresEnSql => proveedoresSql != null;
+    public object HistorialProducto(int id, DateOnly? desde, DateOnly? hasta, string? tipo) =>
+        productosSql?.Historial(id,desde,hasta,tipo) ?? throw new ArgumentException("El historial requiere el modo SQL Server.");
     public bool ProductosEnSql => productosSql != null;
     public bool ComprasEnSql => comprasSql != null;
     public bool ComprasPendientes => ProductosEnSql && !ComprasEnSql;
@@ -75,9 +77,9 @@ public partial class TiendaService
         return (datos.Codigo, datos.Nombre, datos.Precio);
     }
 
-    public Producto RegistrarProducto(RegistroProductoSolicitud solicitud)
+    public Producto RegistrarProducto(RegistroProductoSolicitud solicitud, int? usuarioId = null)
     {
-        if (productosSql != null) return productosSql.RegistrarProducto(solicitud);
+        if (productosSql != null) return productosSql.RegistrarProducto(solicitud, usuarioId);
         lock (bloqueo)
         {
             var datos = ValidarProducto(solicitud);
@@ -89,9 +91,9 @@ public partial class TiendaService
         }
     }
 
-    public Producto EditarProducto(int id, ProductoSolicitud solicitud)
+    public Producto EditarProducto(int id, ProductoSolicitud solicitud, int? usuarioId = null)
     {
-        if (productosSql != null) return productosSql.EditarProducto(id, solicitud);
+        if (productosSql != null) return productosSql.EditarProducto(id, solicitud, usuarioId);
         lock (bloqueo)
         {
             Producto producto = ObtenerProducto(id);
@@ -103,9 +105,9 @@ public partial class TiendaService
         }
     }
 
-    public Producto CambiarEstadoProducto(int id, EstadoProductoSolicitud solicitud)
+    public Producto CambiarEstadoProducto(int id, EstadoProductoSolicitud solicitud, int? usuarioId = null)
     {
-        if (productosSql != null) return productosSql.CambiarEstadoProducto(id, solicitud);
+        if (productosSql != null) return productosSql.CambiarEstadoProducto(id, solicitud, usuarioId);
         lock (bloqueo)
         {
             Producto producto = ObtenerProducto(id);

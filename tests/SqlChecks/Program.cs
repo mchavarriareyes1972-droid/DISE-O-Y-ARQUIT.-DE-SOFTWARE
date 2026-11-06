@@ -281,7 +281,7 @@ try
 finally
 {
     using var c = ConexionBD.Instancia.CrearConexion(); c.Open();
-    using var cmd = new SqlCommand("DELETE FROM ProductosAlternativos WHERE IdProducto IN (SELECT IdProducto FROM Productos WHERE Codigo IN ('QA_SQL_01','QA_SQL_02','QA_SQL_03','QA_SQL_DUPE')) OR IdAlternativo IN (SELECT IdProducto FROM Productos WHERE Codigo IN ('QA_SQL_01','QA_SQL_02','QA_SQL_03','QA_SQL_DUPE')); DELETE FROM Productos WHERE Codigo IN ('QA_SQL_01','QA_SQL_02','QA_SQL_03','QA_SQL_DUPE')", c); cmd.ExecuteNonQuery();
+    using var cmd = new SqlCommand("DELETE FROM ProductosAlternativos WHERE IdProducto IN (SELECT IdProducto FROM Productos WHERE Codigo IN ('QA_SQL_01','QA_SQL_02','QA_SQL_03','QA_SQL_DUPE')) OR IdAlternativo IN (SELECT IdProducto FROM Productos WHERE Codigo IN ('QA_SQL_01','QA_SQL_02','QA_SQL_03','QA_SQL_DUPE')); DELETE FROM HistorialProductos WHERE IdProducto IN (SELECT IdProducto FROM Productos WHERE Codigo IN ('QA_SQL_01','QA_SQL_02','QA_SQL_03','QA_SQL_DUPE')); DELETE FROM Productos WHERE Codigo IN ('QA_SQL_01','QA_SQL_02','QA_SQL_03','QA_SQL_DUPE')", c); cmd.ExecuteNonQuery();
 }
 Verificar(tiendaCatalogo.BuscarProductos(null, true).Count == 120 && Escalar("SELECT COUNT(*) FROM ProductosAlternativos") == 56 && productosSql.ContarStockBajo() == 7, "Pruebas de productos dejan intactos el catalogo, las alternativas y las alertas originales.");
 
@@ -351,7 +351,7 @@ try
 finally
 {
     SqlCompraPrueba("DROP TRIGGER IF EXISTS qa_Prueba_Compra_Atomicidad");
-    SqlCompraPrueba($"DELETE FROM DetalleCompras WHERE IdCompra IN (SELECT IdCompra FROM Compras WHERE IdProveedor = {proveedorCompra.Id}); DELETE FROM Compras WHERE IdProveedor = {proveedorCompra.Id}; DELETE FROM Productos WHERE IdProducto IN ({productoA.Id}, {productoB.Id}, {productoLimite.Id}); DELETE FROM Proveedores WHERE IdProveedor = {proveedorCompra.Id}");
+    SqlCompraPrueba($"DELETE FROM DetalleCompras WHERE IdCompra IN (SELECT IdCompra FROM Compras WHERE IdProveedor = {proveedorCompra.Id}); DELETE FROM Compras WHERE IdProveedor = {proveedorCompra.Id}; DELETE FROM HistorialProductos WHERE IdProducto IN (SELECT IdProducto FROM Productos WHERE IdProducto IN ({productoA.Id}, {productoB.Id}, {productoLimite.Id})); DELETE FROM Productos WHERE IdProducto IN ({productoA.Id}, {productoB.Id}, {productoLimite.Id}); DELETE FROM Proveedores WHERE IdProveedor = {proveedorCompra.Id}");
 }
 Verificar(tiendaCompras.ConsultarCompras().Count == 60 && tiendaCatalogo.BuscarProductos(null, true).Count == 120 && productosSql.ContarStockBajo() == 7, "Pruebas de compras dejan intacta la carga original.");
 
@@ -443,7 +443,7 @@ try
 finally
 {
     SqlCompraPrueba("DROP TRIGGER IF EXISTS qa_Prueba_Venta_Atomicidad");
-    SqlCompraPrueba($"DECLARE @ventas TABLE (Id int); INSERT INTO @ventas SELECT DISTINCT IdVenta FROM DetalleVentas WHERE IdProducto IN ({articuloA.Id},{articuloB.Id},{articuloMax.Id}); DELETE FROM DetalleVentas WHERE IdVenta IN (SELECT Id FROM @ventas); DELETE FROM Ventas WHERE IdVenta IN (SELECT Id FROM @ventas); DECLARE @compras TABLE (Id int); INSERT INTO @compras SELECT DISTINCT IdCompra FROM DetalleCompras WHERE IdProducto={articuloA.Id}; DELETE FROM DetalleCompras WHERE IdCompra IN (SELECT Id FROM @compras); DELETE FROM Compras WHERE IdCompra IN (SELECT Id FROM @compras); DELETE FROM Productos WHERE IdProducto IN ({articuloA.Id},{articuloB.Id},{articuloMax.Id}); DELETE FROM Clientes WHERE IdCliente={clienteVenta.Id}");
+    SqlCompraPrueba($"DECLARE @ventas TABLE (Id int); INSERT INTO @ventas SELECT DISTINCT IdVenta FROM DetalleVentas WHERE IdProducto IN ({articuloA.Id},{articuloB.Id},{articuloMax.Id}); DELETE FROM DetalleVentas WHERE IdVenta IN (SELECT Id FROM @ventas); DELETE FROM Ventas WHERE IdVenta IN (SELECT Id FROM @ventas); DECLARE @compras TABLE (Id int); INSERT INTO @compras SELECT DISTINCT IdCompra FROM DetalleCompras WHERE IdProducto={articuloA.Id}; DELETE FROM DetalleCompras WHERE IdCompra IN (SELECT Id FROM @compras); DELETE FROM Compras WHERE IdCompra IN (SELECT Id FROM @compras); DELETE FROM HistorialProductos WHERE IdProducto IN (SELECT IdProducto FROM Productos WHERE IdProducto IN ({articuloA.Id},{articuloB.Id},{articuloMax.Id})); DELETE FROM Productos WHERE IdProducto IN ({articuloA.Id},{articuloB.Id},{articuloMax.Id}); DELETE FROM Clientes WHERE IdCliente={clienteVenta.Id}");
 }
 Verificar(ventasSql.ConsultarVentas(null,null).Count == 931 && tiendaCompras.ConsultarCompras().Count == 60 && tiendaCatalogo.BuscarProductos(null,true).Count == 120, "Pruebas de ventas dejan intactos los movimientos y catalogos originales.");
 
@@ -531,7 +531,7 @@ try
 finally
 {
     SqlCompraPrueba("DROP TRIGGER IF EXISTS qa_Prueba_Abono_Atomicidad");
-    SqlCompraPrueba($"DELETE FROM Pagos WHERE IdCliente IN ({clienteAbono.Id},{clienteOtroAbono.Id}); DELETE FROM DetalleVentas WHERE IdVenta IN (SELECT IdVenta FROM Ventas WHERE IdCliente IN ({clienteAbono.Id},{clienteOtroAbono.Id})); DELETE FROM Ventas WHERE IdCliente IN ({clienteAbono.Id},{clienteOtroAbono.Id}); DELETE FROM Productos WHERE IdProducto={articuloAbono.Id}; DELETE FROM Clientes WHERE IdCliente IN ({clienteAbono.Id},{clienteOtroAbono.Id}); DELETE FROM Usuarios WHERE IdUsuario={usuarioAbono.Id}");
+    SqlCompraPrueba($"DELETE FROM Pagos WHERE IdCliente IN ({clienteAbono.Id},{clienteOtroAbono.Id}); DELETE FROM DetalleVentas WHERE IdVenta IN (SELECT IdVenta FROM Ventas WHERE IdCliente IN ({clienteAbono.Id},{clienteOtroAbono.Id})); DELETE FROM Ventas WHERE IdCliente IN ({clienteAbono.Id},{clienteOtroAbono.Id}); DELETE FROM HistorialProductos WHERE IdProducto IN (SELECT IdProducto FROM Productos WHERE IdProducto={articuloAbono.Id}); DELETE FROM Productos WHERE IdProducto={articuloAbono.Id}; DELETE FROM Clientes WHERE IdCliente IN ({clienteAbono.Id},{clienteOtroAbono.Id}); DELETE FROM Usuarios WHERE IdUsuario={usuarioAbono.Id}");
 }
 Verificar(tiendaPagos.ConsultarPagos(null).Count == 124 && ventasSql.ConsultarVentas(null,null).Count == 931 && productosSql.BuscarProductos(null,true).Count == 120 && clientesSql.ConsultarClientes(true).Count == 60, "Pruebas de abonos conservan los datos originales de la base temporal.");
 

@@ -328,3 +328,17 @@ else:
     csv_abonos = admin.open(base + '/api/tienda/reporte/exportar/csv').read().decode('utf-8-sig')
     verificar('"Abono";"' + str(pago_digital['id']) + '";' in csv_abonos, 'CSV incluye el abono digital recien registrado.')
 print(f'{comprobaciones} comprobaciones HTTP con SQL correctas.')
+
+# Historial: persistencia, permisos, filtros y valores anterior/nuevo.
+producto_historial = api('productos?busqueda=QA_HTTP_02')[0]
+historial = api(f"productos/{producto_historial['id']}/historial")['movimientos']
+verificar(any(m['tipo'] == 'Compra' and m['stockNuevo'] > m['stockAnterior'] for m in historial), 'Historial conserva entradas de compra.')
+verificar(any(m['tipo'] == 'Venta' and m['stockNuevo'] < m['stockAnterior'] for m in historial), 'Historial conserva salidas de venta.')
+precio_original = producto_historial['precio']
+api(f"productos/{producto_historial['id']}/editar", {**producto_historial, 'precio': precio_original + 1})
+precios = api(f"productos/{producto_historial['id']}/historial?tipo=Precio")['movimientos']
+verificar(precios[0]['precioAnterior'] == precio_original and precios[0]['precioNuevo'] == precio_original + 1, 'Historial guarda precio anterior y nuevo.')
+verificar(precios[0]['usuario'] != 'Sin usuario registrado', 'Historial identifica al usuario autenticado.')
+api(f"productos/{producto_historial['id']}/editar", producto_historial)
+api(f"productos/{producto_historial['id']}/historial?desde=2026-12-31&hasta=2026-01-01", esperado=400)
+api(f"productos/{producto_historial['id']}/historial", conexion=caja, esperado=403)

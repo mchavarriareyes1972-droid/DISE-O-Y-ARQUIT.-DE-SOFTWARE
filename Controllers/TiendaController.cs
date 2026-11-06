@@ -20,11 +20,12 @@ public class TiendaController : ControllerBase
         catch (ArgumentException error) { return BadRequest(new { mensaje = error.Message }); }
         catch (OverflowException) { return BadRequest(new { mensaje = "El importe excede el límite permitido." }); }
     }
+    [Authorize(Roles = Roles.Administrador), HttpGet("productos/{id:int}/historial")] public IActionResult HistorialProducto(int id, DateOnly? desde, DateOnly? hasta, string? tipo) => Operacion(() => tienda.HistorialProducto(id,desde,hasta,tipo));
     [HttpGet("productos")] public IActionResult Productos(string? busqueda, bool incluirInactivos = false) => Ok(tienda.BuscarProductos(busqueda, incluirInactivos));
     [HttpGet("productos/{id:int}")] public IActionResult Producto(int id) => Operacion(() => tienda.ConsultarProducto(id));
-    [Authorize(Roles = Roles.Administrador), HttpPost("productos"), ValidateAntiForgeryToken] public IActionResult RegistrarProducto(RegistroProductoSolicitud solicitud) => Operacion(() => tienda.RegistrarProducto(solicitud));
-    [Authorize(Roles = Roles.Administrador), HttpPost("productos/{id:int}/editar"), ValidateAntiForgeryToken] public IActionResult EditarProducto(int id, ProductoSolicitud solicitud) => Operacion(() => tienda.EditarProducto(id, solicitud));
-    [Authorize(Roles = Roles.Administrador), HttpPost("productos/{id:int}/estado"), ValidateAntiForgeryToken] public IActionResult EstadoProducto(int id, EstadoProductoSolicitud solicitud) => Operacion(() => tienda.CambiarEstadoProducto(id, solicitud));
+    [Authorize(Roles = Roles.Administrador), HttpPost("productos"), ValidateAntiForgeryToken] public IActionResult RegistrarProducto(RegistroProductoSolicitud solicitud) => Operacion(() => tienda.RegistrarProducto(solicitud, int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!)));
+    [Authorize(Roles = Roles.Administrador), HttpPost("productos/{id:int}/editar"), ValidateAntiForgeryToken] public IActionResult EditarProducto(int id, ProductoSolicitud solicitud) => Operacion(() => tienda.EditarProducto(id, solicitud, int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!)));
+    [Authorize(Roles = Roles.Administrador), HttpPost("productos/{id:int}/estado"), ValidateAntiForgeryToken] public IActionResult EstadoProducto(int id, EstadoProductoSolicitud solicitud) => Operacion(() => tienda.CambiarEstadoProducto(id, solicitud, int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!)));
     [HttpGet("clientes")] public IActionResult Clientes(bool incluirInactivos = false) => Ok(tienda.ConsultarClientes(incluirInactivos));
     [Authorize(Roles = Roles.Administrador), HttpPost("clientes"), ValidateAntiForgeryToken] public IActionResult RegistrarCliente(ClienteSolicitud solicitud) => Operacion(() => tienda.RegistrarCliente(solicitud));
     [Authorize(Roles = Roles.Administrador), HttpPost("clientes/{id:int}/editar"), ValidateAntiForgeryToken] public IActionResult EditarCliente(int id, ClienteSolicitud solicitud) => Operacion(() => tienda.EditarCliente(id, solicitud));

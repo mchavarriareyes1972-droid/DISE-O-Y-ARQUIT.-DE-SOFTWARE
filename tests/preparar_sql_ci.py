@@ -36,7 +36,7 @@ def hash_identity(clave):
     return base64.b64encode(b'\x01' + struct.pack('>III', 2, 100000, 16) + sal + subclave).decode()
 
 with tempfile.TemporaryDirectory() as temporal:
-    for archivo in ['01_Crear_Tablas.sql', '02_Datos_Un_Mes.sql']:
+    for archivo in ['01_Crear_Tablas.sql', '02_Datos_Un_Mes.sql', '03_Historial_Productos.sql', '03_Historial_Productos.sql']:
         texto = Path('database', archivo).read_text(encoding='utf-8-sig')
         texto = texto.replace('$(HASH_ADMIN)', hash_identity(clave_admin)).replace('$(HASH_CAJERO)', hash_identity(clave_caja))
         local = Path(temporal, archivo)

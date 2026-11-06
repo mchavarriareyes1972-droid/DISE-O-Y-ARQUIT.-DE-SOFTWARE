@@ -138,6 +138,7 @@ public sealed class VentasSqlService
             stock.Parameters.Add("@id", SqlDbType.Int).Value = detalle.ProductoId;
             stock.Parameters.Add("@cantidad", SqlDbType.Int).Value = detalle.Cantidad;
             if (stock.ExecuteNonQuery() != 1) throw new ArgumentException("No se pudo actualizar el inventario.");
+            HistorialProductosSql.Movimiento(c,tx,detalle.ProductoId,usuarioId,-detalle.Cantidad,"Venta",idVenta);
         }
         Venta venta = Consultar(c, tx, idVenta).Single();
         tx.Commit();

@@ -196,7 +196,7 @@ function renderInventario(productos) {
     tabla('tablaInventario', productos, 7, p => {
         const acciones = elemento('div', '', 'button-row');
         acciones.append(boton('Ficha', () => fichaProducto(p.id)));
-        if (esAdministrador) acciones.append(boton('Editar', () => abrirProducto(p)),
+        if (esAdministrador) acciones.append(boton('Ver historial', () => historialProducto(p.id)), boton('Editar', () => abrirProducto(p)),
             boton(p.activo ? 'Desactivar' : 'Activar', evento => cambiarEstadoProducto(p, evento.currentTarget)));
         return [p.codigo, p.nombre, dinero(p.precio), p.stock, p.stockMinimo,
             elemento('span', !p.activo ? 'Inactivo' : p.stockBajo ? 'Reponer' : 'Disponible',

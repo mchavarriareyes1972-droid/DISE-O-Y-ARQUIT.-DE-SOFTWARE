@@ -76,12 +76,19 @@ public sealed class ProductosSqlService
         return Convert.ToInt32(cmd.ExecuteScalar());
     }
 
-    private Producto Guardar(string sql, Producto? datos = null, int? id = null, bool? activo = null, int? minimo = null)
+    private Producto Guardar(string sql, Producto? datos = null, int? id = null, bool? activo = null, int? minimo = null, int? usuarioId = null)
     {
         using var c = conexion.CrearConexion(); c.Open();
         using var tx = c.BeginTransaction();
         try
         {
+            Producto? anterior = null;
+            if (id.HasValue)
+            {
+                using var bloqueo = new SqlCommand("SELECT IdProducto FROM Productos WITH (UPDLOCK,HOLDLOCK) WHERE IdProducto=@id",c,tx);
+                bloqueo.Parameters.AddWithValue("@id",id.Value); bloqueo.ExecuteScalar();
+                anterior = ObtenerProducto(c,tx,id.Value);
+            }
             using var cmd = new SqlCommand(sql, c, tx);
             if (datos != null)
             {
@@ -97,6 +104,11 @@ public sealed class ProductosSqlService
             object? resultado = cmd.ExecuteScalar();
             if (resultado == null) throw new ArgumentException("El producto no existe.");
             Producto producto = ObtenerProducto(c, tx, Convert.ToInt32(resultado));
+            if (anterior == null) HistorialProductosSql.Registrar(c,tx,producto.Id,usuarioId,"Registro inicial","Alta del producto.",null,0,null);
+            else {
+                if (anterior.Precio != producto.Precio) HistorialProductosSql.Registrar(c,tx,producto.Id,usuarioId,"Precio","Cambio de precio de venta.",null,anterior.Stock,anterior.Precio);
+                if (anterior.Activo != producto.Activo) HistorialProductosSql.Registrar(c,tx,producto.Id,usuarioId,"Estado",producto.Activo ? "Producto activado." : "Producto desactivado.",null,anterior.Stock,anterior.Precio);
+            }
             tx.Commit();
             return producto;
         }
@@ -106,21 +118,21 @@ public sealed class ProductosSqlService
         }
     }
 
-    public Producto RegistrarProducto(RegistroProductoSolicitud solicitud)
+    public Producto RegistrarProducto(RegistroProductoSolicitud solicitud, int? usuarioId = null)
     {
         Producto datos = ProductosValidacion.Validar(solicitud);
         if (solicitud.StockInicial < 0) throw new ArgumentException("El stock inicial no puede ser negativo.");
         datos.Stock = solicitud.StockInicial;
-        return Guardar("INSERT INTO Productos (Codigo, Nombre, PrecioVenta, Stock, StockMinimo) OUTPUT INSERTED.IdProducto VALUES (@codigo, @nombre, @precio, @stock, @minimo)", datos);
+        return Guardar("INSERT INTO Productos (Codigo, Nombre, PrecioVenta, Stock, StockMinimo) OUTPUT INSERTED.IdProducto VALUES (@codigo, @nombre, @precio, @stock, @minimo)", datos, usuarioId: usuarioId);
     }
 
-    public Producto EditarProducto(int id, ProductoSolicitud solicitud) => Guardar(
+    public Producto EditarProducto(int id, ProductoSolicitud solicitud, int? usuarioId = null) => Guardar(
         "UPDATE Productos SET Codigo = @codigo, Nombre = @nombre, PrecioVenta = @precio, StockMinimo = @minimo OUTPUT INSERTED.IdProducto WHERE IdProducto = @id",
-        ProductosValidacion.Validar(solicitud), id);
+        ProductosValidacion.Validar(solicitud), id, usuarioId: usuarioId);
 
-    public Producto CambiarEstadoProducto(int id, EstadoProductoSolicitud solicitud) => Guardar(
+    public Producto CambiarEstadoProducto(int id, EstadoProductoSolicitud solicitud, int? usuarioId = null) => Guardar(
         "UPDATE Productos SET Activo = @activo OUTPUT INSERTED.IdProducto WHERE IdProducto = @id",
-        id: id, activo: solicitud.Activo ?? throw new ArgumentException("Indica si deseas activar o desactivar el producto."));
+        id: id, activo: solicitud.Activo ?? throw new ArgumentException("Indica si deseas activar o desactivar el producto."), usuarioId: usuarioId);
 
     public Producto ActualizarStockMinimo(StockMinimoSolicitud solicitud)
     {
@@ -160,5 +172,34 @@ public sealed class ProductosSqlService
         Producto producto = ObtenerProducto(c, tx, solicitud.ProductoId);
         tx.Commit();
         return producto;
+    }
+    public object Historial(int id, DateOnly? desde, DateOnly? hasta, string? tipo)
+    {
+        if (hasta == DateOnly.MaxValue) throw new ArgumentException("Selecciona una fecha final menor a 31/12/9999.");
+        if (desde > hasta) throw new ArgumentException("La fecha inicial no puede superar la final.");
+        using var c = conexion.CrearConexion(); c.Open();
+        var producto = ObtenerProducto(c,null,id);
+        using var existe = new SqlCommand("SELECT OBJECT_ID('dbo.HistorialProductos','U')",c);
+        if (existe.ExecuteScalar() is DBNull) throw new ArgumentException("Ejecuta primero el script 03_Historial_Productos.sql en tu base de datos.");
+        using var cmd = new SqlCommand("""
+            SELECT h.IdHistorial,h.Fecha,h.Tipo,h.Descripcion,u.Nombre,h.Referencia,h.StockAnterior,h.StockNuevo,h.PrecioAnterior,h.PrecioNuevo
+            FROM HistorialProductos h LEFT JOIN Usuarios u ON u.IdUsuario=h.IdUsuario
+            WHERE h.IdProducto=@id AND (@desde IS NULL OR h.Fecha>=@desde)
+              AND (@hasta IS NULL OR h.Fecha<@hasta) AND (@tipo IS NULL OR h.Tipo=@tipo)
+            ORDER BY h.Fecha DESC,h.IdHistorial DESC
+            """,c);
+        cmd.Parameters.AddWithValue("@id",id);
+        cmd.Parameters.Add("@desde",SqlDbType.DateTimeOffset).Value = desde.HasValue ? new DateTimeOffset(desde.Value.ToDateTime(TimeOnly.MinValue),TimeSpan.FromHours(-5)) : DBNull.Value;
+        cmd.Parameters.Add("@hasta",SqlDbType.DateTimeOffset).Value = hasta.HasValue ? new DateTimeOffset(hasta.Value.ToDateTime(TimeOnly.MinValue),TimeSpan.FromHours(-5)).AddDays(1) : DBNull.Value;
+        cmd.Parameters.Add("@tipo",SqlDbType.NVarChar,30).Value = string.IsNullOrWhiteSpace(tipo) ? DBNull.Value : tipo;
+        var filas = new List<object>();
+        using var lector=cmd.ExecuteReader();
+        while(lector.Read()) filas.Add(new {
+            Id=lector.GetInt64(0), Fecha=lector.GetDateTimeOffset(1), Tipo=lector.GetString(2), Descripcion=lector.GetString(3),
+            Usuario=lector.IsDBNull(4)?"Sin usuario registrado":lector.GetString(4), Referencia=lector.IsDBNull(5)?"—":lector.GetString(5),
+            StockAnterior=lector.IsDBNull(6)?(int?)null:lector.GetInt32(6), StockNuevo=lector.IsDBNull(7)?(int?)null:lector.GetInt32(7),
+            PrecioAnterior=lector.IsDBNull(8)?(decimal?)null:lector.GetDecimal(8), PrecioNuevo=lector.IsDBNull(9)?(decimal?)null:lector.GetDecimal(9)
+        });
+        return new { Producto=producto, Movimientos=filas };
     }
 }
