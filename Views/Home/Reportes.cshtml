@@ -1,11 +1,7 @@
 @inject Tienda_Giovanna.Services.TiendaService Tienda
 @{ ViewData["Title"] = "Reportes"; }
 <div class="page-heading"><div><p class="eyebrow">VENTAS Y REPORTES</p><h1>Ventas y abonos</h1><p>Consulta un periodo, revisa sus movimientos y descarga el reporte.</p></div></div>
-@if (Tienda.VentasEnSql)
-{
-    
-}
-else if (Tienda.ProductosEnSql)
+@if (!Tienda.VentasEnSql && Tienda.ProductosEnSql)
 {
     <p class="notice">La alerta de stock bajo consulta las existencias actuales de la base de datos. Los indicadores e historial de ventas y abonos todavía están pendientes de conexión y no muestran los movimientos cargados en SQL Server.</p>
 }
