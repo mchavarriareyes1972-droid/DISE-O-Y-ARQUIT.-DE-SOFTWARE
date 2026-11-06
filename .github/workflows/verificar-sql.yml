@@ -1,0 +1,67 @@
+name: Verificar usuarios y datos en SQL Server
+on:
+  push:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      Persistencia__Usuarios: SqlServer
+      Persistencia__Clientes: SqlServer
+      Persistencia__Proveedores: SqlServer
+      Persistencia__Productos: SqlServer
+      Persistencia__Compras: SqlServer
+      Persistencia__Ventas: SqlServer
+      Persistencia__Pagos: SqlServer
+      ASPNETCORE_ENVIRONMENT: Development
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Crear y cargar una base temporal con claves generadas
+        run: python3 tests/preparar_sql_ci.py
+      - name: Compilar el proyecto
+        run: dotnet build Tienda_Giovanna.csproj
+      - name: Probar autenticacion, persistencia, restricciones y Singleton
+        run: dotnet run --project tests/SqlChecks/SqlChecks.csproj
+      - name: Preparar Chromium para probar los catalogos de SQL
+        run: |
+          npm install --prefix /tmp/giovanna-ui --no-save playwright@1.62.1
+          /tmp/giovanna-ui/node_modules/.bin/playwright install --with-deps chromium
+          sudo apt-get install -y poppler-utils
+      - name: Probar la aplicacion HTTP usando usuarios de SQL Server
+        env:
+          NODE_PATH: /tmp/giovanna-ui/node_modules
+        run: |
+          dotnet run --no-build --no-launch-profile --project Tienda_Giovanna.csproj --urls http://127.0.0.1:5099 > /tmp/giovanna-sql.log 2>&1 &
+          servidor=$!
+          trap 'kill "$servidor"' EXIT
+          python3 tests/http_sql_checks.py
+          kill "$servidor"
+          wait "$servidor" || true
+          dotnet run --no-build --no-launch-profile --project Tienda_Giovanna.csproj --urls http://127.0.0.1:5099 >> /tmp/giovanna-sql.log 2>&1 &
+          servidor=$!
+          python3 tests/http_sql_checks.py --verificar-reinicio
+          node tests/browser_clientes_sql.cjs
+          node tests/browser_proveedores_sql.cjs
+          node tests/browser_productos_sql.cjs
+          node tests/browser_compras_sql.cjs
+          node tests/browser_ventas_sql.cjs
+          node tests/browser_pagos_sql.cjs
+          node tests/browser_reportes_sql.cjs
+          python3 tests/reportes_http_checks.py
+      - name: Reporte de la aplicacion
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reporte-sql
+          path: |
+            /tmp/giovanna-sql.log
+            /tmp/giovanna-qa
+      - name: Eliminar contenedor temporal
+        if: always()
+        run: docker rm -f giovanna-sql-ci

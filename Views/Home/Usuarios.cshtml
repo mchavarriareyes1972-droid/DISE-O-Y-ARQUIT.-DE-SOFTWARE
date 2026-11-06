@@ -1,0 +1,10 @@
+@{ ViewData["Title"] = "Usuarios"; }
+<div class="page-heading"><div><p class="eyebrow">ACCESO AL SISTEMA</p><h1>Usuarios y roles</h1><p>El administrador gestiona el sistema; el cajero realiza ventas, cobros y consultas.</p></div><button id="nuevoUsuario" type="button" class="primary">Nuevo usuario</button></div>
+<section class="card"><div class="table-wrap"><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="tablaUsuarios"></tbody></table></div><p id="mensajeUsuarios" class="message" role="status"></p></section>
+<dialog id="dialogoUsuario" aria-labelledby="tituloUsuario"><h2 id="tituloUsuario">Nuevo usuario</h2><form id="formUsuario"><input id="usuarioEditarId" type="hidden" /><div class="form-grid">
+    <div><label for="loginUsuario">Usuario</label><input id="loginUsuario" pattern="[a-zA-Z0-9_.-]{3,30}" minlength="3" maxlength="30" autocomplete="off" required /></div>
+    <div><label for="nombreUsuario">Nombre</label><input id="nombreUsuario" maxlength="100" required /></div>
+    <div><label for="rolUsuario">Rol</label><select id="rolUsuario"><option>Cajero</option><option>Administrador</option></select></div>
+    <div><label for="passwordUsuario">Contraseña</label><input id="passwordUsuario" type="password" minlength="8" maxlength="100" autocomplete="new-password" /><small id="notaPassword">Mínimo 8 caracteres.</small></div>
+    <div id="campoEstadoUsuario"><label for="estadoUsuario">Estado</label><select id="estadoUsuario"><option value="true">Activo</option><option value="false">Inactivo</option></select></div>
+</div><small>Debe quedar un administrador activo. Cambiar una cuenta cerrará sus sesiones anteriores.</small><p id="mensajeUsuarioFormulario" class="message" role="status"></p><div class="button-row"><button type="submit" class="primary">Guardar usuario</button><button type="button" id="cancelarUsuario">Cancelar</button></div></form></dialog>
