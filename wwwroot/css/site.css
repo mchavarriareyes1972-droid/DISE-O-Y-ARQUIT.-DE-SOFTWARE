@@ -428,3 +428,15 @@ dialog::backdrop { background: rgba(0, 0, 0, .4); }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid #24786b; outline-offset: 2px; }
 .product-row .button-row { justify-content: flex-end; }
 @media (max-width: 600px) { .product-row { flex-wrap: wrap; gap: 10px; } .product-row .button-row { justify-content: flex-start; } }
+
+#dialogoCompra { max-width:960px; width:min(960px,94vw); max-height:90vh; overflow:auto; }
+#dialogoDocumento { max-width:1000px; width:min(1000px,94vw); max-height:90vh; overflow:auto; }
+.ticket { max-width:360px; margin:auto; font-family:monospace; }
+.ticket h2,.ticket h3 { text-align:center; }
+.ticket .linea-ticket { border-bottom:1px dashed #888; padding:8px 0; }
+@media print {
+ body.imprimiendo-documento .app-shell, body.imprimiendo-documento .app, body.imprimiendo-documento > :not(#dialogoDocumento) { display:none !important; }
+ body.imprimiendo-documento #dialogoDocumento { position:static; display:block; width:100%; max-height:none; border:0; overflow:visible; }
+ body.imprimiendo-documento #dialogoDocumento .acciones-documento { display:none; }
+ body.imprimiendo-documento #dialogoDocumento::backdrop { background:white; }
+}

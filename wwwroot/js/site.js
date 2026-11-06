@@ -184,6 +184,7 @@ async function iniciarVentas() {
             formaPago: $('formaPago').value, clienteId: Number($('clienteFiado').value) || null,
             montoRecibido: $('formaPago').value === 'Efectivo' ? Number($('montoRecibido').value) : 0,
             referenciaPago: $('referenciaPago').value });
+        mostrarTicket(venta);
         carrito = []; $('formVenta').reset(); renderCarrito();
         renderProductos(await api('productos?busqueda=' + encodeURIComponent($('buscarProducto').value)));
         mensaje('mensajeVenta', `Venta N.º ${venta.id} registrada. Total: ${dinero(venta.total)}. Vuelto: ${dinero(venta.vuelto)}.`);
@@ -292,6 +293,8 @@ async function renderCompras() {
     tabla('tablaCompras', compras, 7, c => [c.id, fecha(c.fecha), c.proveedorNombre, c.usuarioNombre || 'Práctica', c.detalles.length, dinero(c.total), boton('Ver detalle', () => detalleCompra(c.id))]);
 }
 async function iniciarCompras() {
+    $('nuevaCompra').addEventListener('click', () => $('dialogoCompra').showModal());
+    $('cerrarCompra').addEventListener('click', () => $('dialogoCompra').close());
     const seleccionar = productos => {
         opciones($('productoCompra'), productos, p => `${p.codigo} · ${p.nombre}`, p => p.id);
         if (!productos.length) mensaje('mensajeCompra', 'No hay productos que coincidan.'); else mensaje('mensajeCompra', '');
@@ -316,6 +319,8 @@ async function iniciarCompras() {
     formulario('formCompra', 'mensajeCompra', async () => {
         const compra = await api('compras', { proveedorId: Number($('proveedorCompra').value), items: lineasCompra.map(({ productoId, cantidad, costoUnitario }) => ({ productoId, cantidad, costoUnitario })) });
         lineasCompra = []; renderLineasCompra();
+        $('dialogoCompra').close();
+        mensaje('resultadoCompra', `Compra N.º ${compra.id} registrada. Total: ${dinero(compra.total)}.`);
         await renderCompras();
         const [actuales, encontrados] = await Promise.all([api('productos'), api('productos?busqueda=' + encodeURIComponent($('buscarCompra').value))]);
         catalogo = actuales; seleccionar(encontrados);

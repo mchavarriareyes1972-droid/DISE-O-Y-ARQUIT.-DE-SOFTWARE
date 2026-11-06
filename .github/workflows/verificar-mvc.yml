@@ -28,6 +28,7 @@ jobs:
         run: |
           node --check wwwroot/js/site.js
           node --check wwwroot/js/gestion.js
+          node --check wwwroot/js/documentos.js
       - name: Preparar Chromium para probar productos
         run: |
           npm install --prefix /tmp/giovanna-ui --no-save playwright@1.62.1

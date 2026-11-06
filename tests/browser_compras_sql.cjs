@@ -19,7 +19,7 @@ const fs = require('node:fs');
     }
     try {
         await entrar(page, 'admin', process.env.GIOVANNA_ADMIN_PASSWORD);
-        await page.goto(base + '/Home/Compras');
+        await page.goto(base + '/Home/Compras'); await page.locator('#nuevaCompra').click();
         // Las pruebas HTTP previas agregaron una compra persistida tras reiniciar.
         await texto('cantidadCompras', 'Compras registradas: 61');
         assert.equal(await page.locator('#tablaCompras tr').count(), 61);
@@ -64,7 +64,7 @@ const fs = require('node:fs');
             await fila.waitFor();
             assert.equal(await fila.locator('td').nth(3).innerText(), stock);
         }
-        await page.goto(base + '/Home/Compras'); await texto('cantidadCompras', 'Compras registradas: 62');
+        await page.goto(base + '/Home/Compras'); await page.locator('#nuevaCompra').click(); await texto('cantidadCompras', 'Compras registradas: 62'); await page.locator('#cerrarCompra').click();
         fs.mkdirSync('/tmp/giovanna-qa', { recursive: true });
         await page.screenshot({ path: '/tmp/giovanna-qa/compras-sql.png', fullPage: true });
         const caja = await browser.newPage(); caja.on('pageerror', error => errores.push(error.message));

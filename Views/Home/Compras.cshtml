@@ -2,6 +2,9 @@
 @{ ViewData["Title"] = "Compras"; }
 <div class="page-heading"><div><p class="eyebrow">ABASTECIMIENTO</p><h1>Compras</h1><p>Registra varios productos recibidos de un proveedor.</p><p id="cantidadCompras" class="muted" role="status"></p></div></div>
 
+<button id="nuevaCompra" type="button" class="primary">Nueva compra</button>
+<p id="resultadoCompra" role="status"></p>
+<dialog id="dialogoCompra" aria-labelledby="tituloCompra"><h2 id="tituloCompra">Nueva compra</h2>
 <section class="card">
     <label for="proveedorCompra">Proveedor registrado</label><select id="proveedorCompra" required></select><p id="avisoProveedor" class="muted"></p>
     <form id="formLineaCompra"><div class="form-grid">
@@ -14,5 +17,5 @@
     <div class="total-row"><strong>Total de compra</strong><strong id="totalCompra">S/ 0.00</strong></div>
     <form id="formCompra" data-pendiente="@Tienda.ComprasPendientes.ToString().ToLowerInvariant()"><button type="submit" class="primary" disabled>Registrar compra</button></form>
     <p id="mensajeCompra" class="message" role="status"></p>
-</section>
+</section><button type="button" id="cerrarCompra">Cerrar</button></dialog>
 <section class="card spaced"><h2>Historial de compras</h2><div class="table-wrap"><table><thead><tr><th>N.º</th><th>Fecha</th><th>Proveedor</th><th>Usuario</th><th>Artículos</th><th>Total</th><th>Acción</th></tr></thead><tbody id="tablaCompras"></tbody></table></div></section>

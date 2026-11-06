@@ -67,7 +67,7 @@ const assert = require('node:assert/strict');
         await page.locator('#mostrarInactivos').check();
         await fila().getByRole('button', { name: 'Activar', exact: true }).waitFor();
         assert((await fila().innerText()).includes('Inactivo'));
-        await page.goto(base + '/Home/Compras');
+        await page.goto(base + '/Home/Compras'); await page.locator('#nuevaCompra').click();
         await page.locator('#productoCompra option').first().waitFor({ state: 'attached' });
         assert(!(await page.locator('#productoCompra').innerText()).includes('Q901'));
         await abrirInventario();
