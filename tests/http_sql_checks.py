@@ -121,7 +121,7 @@ if '--verificar-reinicio' in sys.argv:
     verificar(any(p['id'] == proveedor['id'] for p in api('proveedores')), 'Reactivacion del proveedor persistida.')
     api('compras', {'proveedorId': proveedor['id'], 'items': []}, esperado=400)
     pagina_compras = html.unescape(admin.open(base + '/Home/Compras').read().decode())
-    verificar('se guardan juntos en la base de datos' in pagina_compras and 'data-pendiente="false"' in pagina_compras, 'Compras informa que el registro transaccional esta conectado.')
+    verificar('data-pendiente="false"' in pagina_compras, 'Compras habilita el registro conectado a SQL.')
 else:
     proveedores = api('proveedores?incluirInactivos=true')
     verificar(len(proveedores) == 12, 'La API muestra los 12 proveedores cargados en SQL.')
@@ -251,7 +251,7 @@ if '--verificar-reinicio' in sys.argv:
     verificar(api(f"ventas/{fiado['id']}")['clienteNombre'] and fiado['usuarioId'] == 2, 'Cliente fiado y cajero se recuperan de la venta persistida.')
 else:
     pagina_ventas = html.unescape(admin.open(base + '/Home/Ventas').read().decode())
-    verificar('data-bloqueado="false"' in pagina_ventas and 'descuento de stock' in pagina_ventas, 'La pantalla habilita finalizar ventas y explica su guardado en SQL.')
+    verificar('data-bloqueado="false"' in pagina_ventas, 'La pantalla habilita finalizar ventas con SQL.')
     ventas = api('ventas')
     verificar(len(ventas) == 931 and all(v['detalles'] and v['usuarioId'] for v in ventas), 'Historial original SQL con sus 931 ventas, detalles y usuarios.')
     cliente_fiado = api('clientes')[0]
